@@ -10,7 +10,7 @@ To run all of the code for this project, one needs:
 - R (version 4.1.1)
   - packages needed: ggplot2, dplyr, (will add more as necessary)
 - Python (version 3.9)
-  - packages needed: requests, BeautifulSoup, io, etree, urllib.request, urllib, re, string, datetime, pandas, numpy, selenium, webdriver, Keys (will add more as necessary)
+  - packages needed: requests, BeautifulSoup, io, etree, urllib.request, urllib, re, string, datetime, pandas, numpy, selenium, webdriver, Keys, ast, (will add more as necessary)
 - SQL (might not actually end up using SQL)
 
 
