@@ -1,0 +1,157 @@
+---
+title: "Initial Tony Analysis"
+author: "Maximilian Wisnefski"
+date: '2023-10-25'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(ggplot2)
+library(tidyverse)
+library(magrittr)
+```
+
+TO DO: Add comments and markdown text!
+
+```{r}
+tony_data <- read_csv("data/tony_data.csv", show_col_types = FALSE)
+weekly_data <- read_csv("data/weekly_data.csv", show_col_types = FALSE)
+```
+
+
+```{r}
+#the number of unique productions that I have gross/capacity data on from 1979 - 2023
+length(unique(weekly_data$production))
+```
+
+The above number is higher than the number of rows in tony_data. I am almost positive that this is the case because my web scraping code for tony_data ignored productions that did not receive any nominations. I am basing this off of the fact that "Bad Cinderella" (which is in weekly_data) did not receive any nominations and does not appear in tony_data. This applies to a few other productions as well 
+
+```{r}
+#the first merged_data is an inner join, the second is an outer
+merged_data <- merge(weekly_data, tony_data)
+merged_data_all <- merge(weekly_data, tony_data, all = TRUE)
+```
+
+
+```{r}
+merged_data_all$nominations[is.na(merged_data_all$nominations)] <- 0
+merged_data_all$wins[is.na(merged_data_all$wins)] <- 0
+```
+
+
+```{r}
+#sum(is.na(merged_data_all$type))
+prod_longevity = merged_data_all %>% group_by(production)  %>%
+                            summarise(weeks = n(), 
+                                      nominations = mean(nominations), 
+                                      wins = mean(wins),
+                                      year = mean(year), 
+                                      type = min(type), 
+                                      .groups = 'drop')
+
+```
+
+
+```{r}
+ggplot(prod_longevity, aes(x = wins, y = weeks)) +
+  geom_jitter(color = 'maroon') +
+  #not sure why line of best fit won't show up
+  geom_smooth(method = "lm", color = 'skyblue') +
+  ylim(0,450) +
+  labs(x = "Tony wins", y = "weeks running") +
+  ggtitle("Effect of Tony Wins on Production Longevity") +
+  theme_bw() + 
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+```{r}
+ggplot(prod_longevity, aes(x = nominations, y = weeks)) +
+  geom_jitter(color = 'skyblue') +
+  #not sure why line of best fit won't show up
+  geom_smooth(method = "lm", color = 'maroon') +
+  ylim(0,450) +
+  labs(x = "Tony wins", y = "weeks running") +
+  ggtitle("Effect of Tony Nominations on Production Longevity") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+```{r}
+summary(lm(weeks ~ nominations + wins, data = prod_longevity))
+```
+
+```{r}
+spring_awake <- weekly_data[weekly_data$production == 'spring-awakening-448811',] 
+#spring_awake['date'] <- as.Date(spring_awake['date'], format="%m-%d-%Y")
+spring_awake %<>%
+  mutate(date = gsub("Jan", "1,", date),
+         date = gsub("Feb", "2,", date),
+         date = gsub("Mar", "3,", date),
+         date = gsub("Apr", "4,", date),
+         date = gsub("May", "5,", date),
+         date = gsub("Jun", "6,", date),
+         date = gsub("Jul", "7,", date),
+         date = gsub("Aug", "8,", date),
+         date = gsub("Sep", "9,", date),
+         date = gsub("Oct", "10,", date),
+         date = gsub("Nov", "11,", date),
+         date = gsub("Dec", "12,", date),)
+
+spring_awake %<>%
+  mutate(date= as.Date(date, format= "%m, %d, %Y"))
+
+
+pirate_queen <- weekly_data[weekly_data$production == 'the-pirate-queen-426183',] 
+pirate_queen %<>%
+  mutate(date = gsub("Jan", "1,", date),
+         date = gsub("Feb", "2,", date),
+         date = gsub("Mar", "3,", date),
+         date = gsub("Apr", "4,", date),
+         date = gsub("May", "5,", date),
+         date = gsub("Jun", "6,", date),
+         date = gsub("Jul", "7,", date),
+         date = gsub("Aug", "8,", date),
+         date = gsub("Sep", "9,", date),
+         date = gsub("Oct", "10,", date),
+         date = gsub("Nov", "11,", date),
+         date = gsub("Dec", "12,", date),)
+
+pirate_queen %<>%
+  mutate(date= as.Date(date, format= "%m, %d, %Y"))
+```
+
+
+```{r}
+ggplot(spring_awake, aes(x = date, y = gross))+
+  geom_line(color = 'maroon') +
+  scale_x_date(date_breaks = "1 month", 
+                 date_labels = "%B",
+                 limits = as.Date(c('2006-11-19','2007-08-05'))) +
+  labs(y = "weekly gross") +
+  ggtitle("Change in Weekly Gross for Spring Awakening (2006 - 2007)") +
+  theme_bw() +
+  geom_vline(xintercept =  as.numeric(as.Date("2007-05-14")), lwd = 1, color = 'skyblue') +
+  geom_vline(xintercept =  as.numeric(as.Date("2007-06-10")), lwd = 1, color = 'skyblue') +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+```{r}
+ggplot(pirate_queen, aes(x = date, y = gross))+
+  geom_line(color = 'maroon') +
+  scale_x_date(date_breaks = "1 month", 
+                 date_labels = "%B",
+                 limits = as.Date(c('2006-11-19','2007-08-05'))) +
+  labs(y = "weekly gross") +
+  ggtitle("Change in Weekly Gross for The Pirate Queens (2006 - 2007)") +
+  theme_bw() +
+  geom_vline(xintercept =  as.numeric(as.Date("2007-05-14")), lwd = 1, color = 'skyblue') +
+  geom_vline(xintercept =  as.numeric(as.Date("2007-06-10")), lwd = 1, color = 'skyblue') +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+
