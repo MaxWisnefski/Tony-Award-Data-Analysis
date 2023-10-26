@@ -20,13 +20,32 @@ tony_data <- read_csv("data/tony_data.csv", show_col_types = FALSE)
 weekly_data <- read_csv("data/weekly_data.csv", show_col_types = FALSE)
 ```
 
-
 ```{r}
 #the number of unique productions that I have gross/capacity data on from 1979 - 2023
 length(unique(weekly_data$production))
 ```
 
-The above number is higher than the number of rows in tony_data. I am almost positive that this is the case because my web scraping code for tony_data ignored productions that did not receive any nominations. I am basing this off of the fact that "Bad Cinderella" (which is in weekly_data) did not receive any nominations and does not appear in tony_data. This applies to a few other productions as well 
+The above number is higher than the number of rows in tony_data. I am almost positive that this is the case because my web scraping code for tony_data ignored productions that did not receive any nominations. I am basing this off of the fact that "Bad Cinderella" (which is in weekly_data) did not receive any nominations and does not appear in tony_data. This applies to a few other productions as well
+
+```{r}
+#the values for date are all strings. I need to change them vars of type date
+weekly_data %<>%
+  mutate(date = gsub("Jan", "1,", date),
+         date = gsub("Feb", "2,", date),
+         date = gsub("Mar", "3,", date),
+         date = gsub("Apr", "4,", date),
+         date = gsub("May", "5,", date),
+         date = gsub("Jun", "6,", date),
+         date = gsub("Jul", "7,", date),
+         date = gsub("Aug", "8,", date),
+         date = gsub("Sep", "9,", date),
+         date = gsub("Oct", "10,", date),
+         date = gsub("Nov", "11,", date),
+         date = gsub("Dec", "12,", date),)
+
+weekly_data %<>%
+  mutate(date= as.Date(date, format= "%m, %d, %Y"))
+```
 
 ```{r}
 #the first merged_data is an inner join, the second is an outer
@@ -34,12 +53,12 @@ merged_data <- merge(weekly_data, tony_data)
 merged_data_all <- merge(weekly_data, tony_data, all = TRUE)
 ```
 
-
 ```{r}
+#I am doing this for now to account for the missing nom/wins values for productions that did not receive any noms
+#I will fix my web scraping python code later to remedy this issue
 merged_data_all$nominations[is.na(merged_data_all$nominations)] <- 0
 merged_data_all$wins[is.na(merged_data_all$wins)] <- 0
 ```
-
 
 ```{r}
 #sum(is.na(merged_data_all$type))
@@ -53,7 +72,6 @@ prod_longevity = merged_data_all %>% group_by(production)  %>%
 
 ```
 
-
 ```{r}
 ggplot(prod_longevity, aes(x = wins, y = weeks)) +
   geom_jitter(color = 'maroon') +
@@ -66,64 +84,41 @@ ggplot(prod_longevity, aes(x = wins, y = weeks)) +
   theme(plot.title = element_text(hjust = 0.5))
 ```
 
-
 ```{r}
 ggplot(prod_longevity, aes(x = nominations, y = weeks)) +
   geom_jitter(color = 'skyblue') +
   #not sure why line of best fit won't show up
   geom_smooth(method = "lm", color = 'maroon') +
   ylim(0,450) +
-  labs(x = "Tony wins", y = "weeks running") +
+  labs(x = "Tony nominations", y = "weeks running") +
   ggtitle("Effect of Tony Nominations on Production Longevity") +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5))
 ```
 
+```{r}
+longevity_lm <- lm(weeks ~ nominations + wins, data = prod_longevity)
+summary(longevity_lm)
+```
+
+### Checking assumptions of the Linear Regression model
 
 ```{r}
-summary(lm(weeks ~ nominations + wins, data = prod_longevity))
+qqnorm(longevity_lm$resid)
+qqline(longevity_lm$resid, col = "steelblue", lwd = 2)
 ```
+
+
+```{r}
+hist(longevity_lm$resid, xlim = c(-500,500), breaks = 30)
+```
+
 
 ```{r}
 spring_awake <- weekly_data[weekly_data$production == 'spring-awakening-448811',] 
-#spring_awake['date'] <- as.Date(spring_awake['date'], format="%m-%d-%Y")
-spring_awake %<>%
-  mutate(date = gsub("Jan", "1,", date),
-         date = gsub("Feb", "2,", date),
-         date = gsub("Mar", "3,", date),
-         date = gsub("Apr", "4,", date),
-         date = gsub("May", "5,", date),
-         date = gsub("Jun", "6,", date),
-         date = gsub("Jul", "7,", date),
-         date = gsub("Aug", "8,", date),
-         date = gsub("Sep", "9,", date),
-         date = gsub("Oct", "10,", date),
-         date = gsub("Nov", "11,", date),
-         date = gsub("Dec", "12,", date),)
-
-spring_awake %<>%
-  mutate(date= as.Date(date, format= "%m, %d, %Y"))
-
 
 pirate_queen <- weekly_data[weekly_data$production == 'the-pirate-queen-426183',] 
-pirate_queen %<>%
-  mutate(date = gsub("Jan", "1,", date),
-         date = gsub("Feb", "2,", date),
-         date = gsub("Mar", "3,", date),
-         date = gsub("Apr", "4,", date),
-         date = gsub("May", "5,", date),
-         date = gsub("Jun", "6,", date),
-         date = gsub("Jul", "7,", date),
-         date = gsub("Aug", "8,", date),
-         date = gsub("Sep", "9,", date),
-         date = gsub("Oct", "10,", date),
-         date = gsub("Nov", "11,", date),
-         date = gsub("Dec", "12,", date),)
-
-pirate_queen %<>%
-  mutate(date= as.Date(date, format= "%m, %d, %Y"))
 ```
-
 
 ```{r}
 ggplot(spring_awake, aes(x = date, y = gross))+
@@ -139,7 +134,6 @@ ggplot(spring_awake, aes(x = date, y = gross))+
   theme(plot.title = element_text(hjust = 0.5))
 ```
 
-
 ```{r}
 ggplot(pirate_queen, aes(x = date, y = gross))+
   geom_line(color = 'maroon') +
@@ -153,5 +147,3 @@ ggplot(pirate_queen, aes(x = date, y = gross))+
   geom_vline(xintercept =  as.numeric(as.Date("2007-06-10")), lwd = 1, color = 'skyblue') +
   theme(plot.title = element_text(hjust = 0.5))
 ```
-
-
