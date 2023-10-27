@@ -11,7 +11,15 @@ library(dplyr)
 library(ggplot2)
 library(tidyverse)
 library(magrittr)
+#for logistic regression
+library(caTools)
+library(ROCR)
+library(lubridate)
+
+#data(mtcars)
+#cars <- as.data.frame(mtcars)
 ```
+
 
 TO DO: Add comments and markdown text!
 
@@ -21,9 +29,14 @@ weekly_data <- read_csv("data/weekly_data.csv", show_col_types = FALSE)
 ```
 
 ```{r}
+#removing rows I that have missing data
+weekly_data = weekly_data[weekly_data$capacity > 0, ] 
+weekly_data = weekly_data[weekly_data$gross > 0, ] 
+
 #the number of unique productions that I have gross/capacity data on from 1979 - 2023
 length(unique(weekly_data$production))
 ```
+
 
 The above number is higher than the number of rows in tony_data. I am almost positive that this is the case because my web scraping code for tony_data ignored productions that did not receive any nominations. I am basing this off of the fact that "Bad Cinderella" (which is in weekly_data) did not receive any nominations and does not appear in tony_data. This applies to a few other productions as well
 
@@ -72,6 +85,22 @@ prod_longevity = merged_data_all %>% group_by(production)  %>%
 
 ```
 
+
+```{r}
+#average number of weeks that a Broadway production runs (play, musical, special)
+avg_run_len <- mean(prod_longevity$weeks)
+avg_run_len
+```
+
+```{r}
+#median longevity
+median_run_len <- median(prod_longevity$weeks)
+median_run_len
+```
+
+
+
+
 ```{r}
 ggplot(prod_longevity, aes(x = wins, y = weeks)) +
   geom_jitter(color = 'maroon') +
@@ -86,9 +115,9 @@ ggplot(prod_longevity, aes(x = wins, y = weeks)) +
 
 ```{r}
 ggplot(prod_longevity, aes(x = nominations, y = weeks)) +
-  geom_jitter(color = 'skyblue') +
+  geom_jitter(color = 'maroon') +
   #not sure why line of best fit won't show up
-  geom_smooth(method = "lm", color = 'maroon') +
+  geom_smooth(method = "lm", color = 'skyblue') +
   ylim(0,450) +
   labs(x = "Tony nominations", y = "weeks running") +
   ggtitle("Effect of Tony Nominations on Production Longevity") +
@@ -104,13 +133,13 @@ summary(longevity_lm)
 ### Checking assumptions of the Linear Regression model
 
 ```{r}
-qqnorm(longevity_lm$resid)
-qqline(longevity_lm$resid, col = "steelblue", lwd = 2)
+qqnorm(longevity_lm$resid, col = "maroon")
+qqline(longevity_lm$resid, col = "skyblue", lwd = 2)
 ```
 
 
 ```{r}
-hist(longevity_lm$resid, xlim = c(-500,500), breaks = 30)
+hist(longevity_lm$resid, xlim = c(-500,500), breaks = 30, col = "skyblue")
 ```
 
 
@@ -127,7 +156,7 @@ ggplot(spring_awake, aes(x = date, y = gross))+
                  date_labels = "%B",
                  limits = as.Date(c('2006-11-19','2007-08-05'))) +
   labs(y = "weekly gross") +
-  ggtitle("Change in Weekly Gross for Spring Awakening (2006 - 2007)") +
+  ggtitle("Change in Weekly Gross for Spring Awakening\n(2006 - 2007 season)") +
   theme_bw() +
   geom_vline(xintercept =  as.numeric(as.Date("2007-05-14")), lwd = 1, color = 'skyblue') +
   geom_vline(xintercept =  as.numeric(as.Date("2007-06-10")), lwd = 1, color = 'skyblue') +
@@ -137,13 +166,29 @@ ggplot(spring_awake, aes(x = date, y = gross))+
 ```{r}
 ggplot(pirate_queen, aes(x = date, y = gross))+
   geom_line(color = 'maroon') +
+  ylim(100000, 900000) +
   scale_x_date(date_breaks = "1 month", 
                  date_labels = "%B",
-                 limits = as.Date(c('2006-11-19','2007-08-05'))) +
+                 limits = as.Date(c('2007-03-11','2007-08-05'))) +
   labs(y = "weekly gross") +
-  ggtitle("Change in Weekly Gross for The Pirate Queens (2006 - 2007)") +
+  ggtitle("Change in Weekly Gross for The Pirate Queen\n(2006 - 2007 season)") +
   theme_bw() +
   geom_vline(xintercept =  as.numeric(as.Date("2007-05-14")), lwd = 1, color = 'skyblue') +
   geom_vline(xintercept =  as.numeric(as.Date("2007-06-10")), lwd = 1, color = 'skyblue') +
   theme(plot.title = element_text(hjust = 0.5))
 ```
+
+
+```{r}
+#average capacity for each month
+#creating column that just has month of year
+merged_data_all$month <- format(as.Date(merged_data_all$date, format="%d/%m/%Y"),"%m")
+monthly_capacity <- merged_data_all %>% 
+    #group_by(month = lubridate::floor_date(date, 'month')) %>%
+    group_by(month) %>%
+    summarize(avg_capacity = format(mean(capacity), scientific = FALSE))
+monthly_capacity
+```
+
+
+
