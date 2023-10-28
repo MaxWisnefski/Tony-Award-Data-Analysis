@@ -26,12 +26,17 @@ All data is web scraped from the Internet Brodway Database, also known as the IB
 7. <ins>Date:</ins> the date of a week in a production’s run
 8. <ins>Capacity:</ins> the percentage of seats that were filled in a given week for a given production
 
-The data are split into two .csv(?) files. One contains weekly gross and capacity data for every production being considered (weekly_data.csv, variables 5-8). The other contains the number of nominations and wins received for every production being considered (tony_data.csv, variables 1-5). The former dataset has 54,134 rows, and the latter has 1,081 rows. You can find these .csv files in the [data](https://github.com/MaxWisnefski/Tony-Award-Data-Analysis/tree/main/data) folder.
+The data are split into two .csv files. One contains weekly gross and capacity data for every production being considered (weekly_data.csv, variables 5-8). The other contains the number of nominations and wins received for every production being considered (tony_data.csv, variables 1-5). The former dataset has 54,134 rows, and the latter has 1,081 rows. You can find these .csv files in the [data](https://github.com/MaxWisnefski/Tony-Award-Data-Analysis/tree/main/data) folder.
 
 database APA citation: The Broadway League. (2023). Internet Broadway Database. https://www.ibdb.com/
 
 
 ### code files 
 - IBDB_data_collection.ipynb: This notebook is for web scraping data from the IBDB.
+- initial_Tony_analysis.Rmd: This R markdown file contains my early analysis. Specifically, it contains the following:
+  - summary statistics about my data
+  - multiple linear regression model that uses number of nominations and number of wins as predictors for production longevity (i.e. the number of weeks a production stays open)
+  - visuals depicting the relationship between nominations/wins and longevity
+  - two time series graphs deciting how the weekly grosses of two musicals changed based on the outcome of Tony nominations/wins 
 
 ### other info
