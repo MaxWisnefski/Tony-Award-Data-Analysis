@@ -42,6 +42,7 @@ The above number is higher than the number of rows in tony_data. I am almost pos
 
 ```{r}
 #the values for date are all strings. I need to change them vars of type date
+#TO DO: get rid of first mutate, you don't need it, do "%B, %d, %Y" for second mutate instead
 weekly_data %<>%
   mutate(date = gsub("Jan", "1,", date),
          date = gsub("Feb", "2,", date),
@@ -66,11 +67,61 @@ merged_data <- merge(weekly_data, tony_data)
 merged_data_all <- merge(weekly_data, tony_data, all = TRUE)
 ```
 
+
 ```{r}
+#filter out productions that did not fall within time range of Tony nom announcements and ceremony (roughly May 1 - June 15 for all years)
+prods_in_range_df <- merged_data_all %>%
+  filter(date >= as.Date(paste(year(date), 05, 01, sep = "-")),
+         date <= as.Date(paste(year(date), 06, 15, sep = "-")))
+
+#this is a list of productions that were open within the period of time during which they could be affected by Tony wins and loses. These are 
+prods_in_range <- unique(prods_in_range_df$production)
+#prods_in_range
+```
+
+
+```{r}
+#select all rows where production is in list of productions of interest
+all_relevant_data <- merged_data_all %>% filter(production %in% prods_in_range)
+length(unique(all_relevant_data$production))
+```
+
+As you can see, the number of productions in my data decreased by almost half. Many productions do not actually make it to their season's Tony Awards. This can happen because the production is a limited run (a production that is only supposed to run for a set number of weeks, regardless of financial success), or because the production is a flop (it closes after a very short time due to lack of commercial/critical success).
+
+
+Now I need to fix the 'year' column for rows where productions received 0 nominations. The 'year' column is supposed to represent the year in which a production was eligible for the Tony Awards. However, when web scraping, I realized that productions that received 0 noms did not have this info explicitly available on the database, so instead I scraped the date that the production opened. To correct this issue, I need to change this date to the correct year of eligibility. A Tony season runs from early May of one year to late April of the next. Therefore, if a production opened on January 12, 2022, it was eligible for the 2022 Tony Awards, but if a production opened on August 15, 2022, it was eligible for the 2023 Tony Awards. 
+
+```{r}
+#something like this? : format(as.Date(merged_data_all$date, format="%d/%m/%Y"),"%m")
+
+#code to fix 'year' column issue mentioned above
+for (year in all_relevant_data$year){
+  if (nchar(year) > 4){
+    d = as.Date(year, format = "%B, %d, %Y")
+    if (d >= as.Date(paste(year(date), 05, 01, sep = "-"))){
+      #year = year + 1
+    }
+    #if date is earlier than end of April
+    else{
+      #year = year
+    }
+  }
+}
+```
+
+```{r}
+test = as.Date("Mar, 10, 2002", format= "%B, %d, %Y")
+test
+```
+
+
+
+```{r}
+#TO DO: delete this code, shouldn't need it now that you fixed this issue in .ipynb
 #I am doing this for now to account for the missing nom/wins values for productions that did not receive any noms
 #I will fix my web scraping python code later to remedy this issue
-merged_data_all$nominations[is.na(merged_data_all$nominations)] <- 0
-merged_data_all$wins[is.na(merged_data_all$wins)] <- 0
+#merged_data_all$nominations[is.na(merged_data_all$nominations)] <- 0
+#merged_data_all$wins[is.na(merged_data_all$wins)] <- 0
 ```
 
 ```{r}
