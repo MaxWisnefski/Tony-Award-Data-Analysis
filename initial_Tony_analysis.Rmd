@@ -11,10 +11,7 @@ library(dplyr)
 library(ggplot2)
 library(tidyverse)
 library(magrittr)
-#for logistic regression
-library(caTools)
-library(ROCR)
-library(lubridate)
+
 
 #data(mtcars)
 #cars <- as.data.frame(mtcars)
@@ -22,6 +19,8 @@ library(lubridate)
 
 
 TO DO: Add comments and markdown text!
+
+## Data Wrangling
 
 ```{r}
 tony_data <- read_csv("data/tony_data.csv", show_col_types = FALSE)
@@ -41,24 +40,9 @@ length(unique(weekly_data$production))
 The above number is higher than the number of rows in tony_data. I am almost positive that this is the case because my web scraping code for tony_data ignored productions that did not receive any nominations. I am basing this off of the fact that "Bad Cinderella" (which is in weekly_data) did not receive any nominations and does not appear in tony_data. This applies to a few other productions as well
 
 ```{r}
-#the values for date are all strings. I need to change them vars of type date
-#TO DO: get rid of first mutate, you don't need it, do "%B, %d, %Y" for second mutate instead
+#the values for date are all strings. I need to change them vars of class date
 weekly_data %<>%
-  mutate(date = gsub("Jan", "1,", date),
-         date = gsub("Feb", "2,", date),
-         date = gsub("Mar", "3,", date),
-         date = gsub("Apr", "4,", date),
-         date = gsub("May", "5,", date),
-         date = gsub("Jun", "6,", date),
-         date = gsub("Jul", "7,", date),
-         date = gsub("Aug", "8,", date),
-         date = gsub("Sep", "9,", date),
-         date = gsub("Oct", "10,", date),
-         date = gsub("Nov", "11,", date),
-         date = gsub("Dec", "12,", date),)
-
-weekly_data %<>%
-  mutate(date= as.Date(date, format= "%m, %d, %Y"))
+  mutate(date = as.Date(date, format= "%B %d, %Y"))
 ```
 
 ```{r}
@@ -74,7 +58,7 @@ prods_in_range_df <- merged_data_all %>%
   filter(date >= as.Date(paste(year(date), 05, 01, sep = "-")),
          date <= as.Date(paste(year(date), 06, 15, sep = "-")))
 
-#this is a list of productions that were open within the period of time during which they could be affected by Tony wins and loses. These are 
+#this is a list of productions that were open within the period of time during which they could be affected by Tony wins and loses
 prods_in_range <- unique(prods_in_range_df$production)
 #prods_in_range
 ```
@@ -86,71 +70,115 @@ all_relevant_data <- merged_data_all %>% filter(production %in% prods_in_range)
 length(unique(all_relevant_data$production))
 ```
 
-As you can see, the number of productions in my data decreased by almost half. Many productions do not actually make it to their season's Tony Awards. This can happen because the production is a limited run (a production that is only supposed to run for a set number of weeks, regardless of financial success), or because the production is a flop (it closes after a very short time due to lack of commercial/critical success).
+As you can see, the number of productions in my data decreased by almost half. Many productions do not actually make it to their season's Tony Awards. This can happen because the production is a limited run (a production that is only supposed to run for a set number of weeks, regardless of financial success), or because the production is a flop (it closes after a very short time due to lack of commercial/critical success). Note: this number will actually go down to 837 soon because of some additional filtering.
 
 
 Now I need to fix the 'year' column for rows where productions received 0 nominations. The 'year' column is supposed to represent the year in which a production was eligible for the Tony Awards. However, when web scraping, I realized that productions that received 0 noms did not have this info explicitly available on the database, so instead I scraped the date that the production opened. To correct this issue, I need to change this date to the correct year of eligibility. A Tony season runs from early May of one year to late April of the next. Therefore, if a production opened on January 12, 2022, it was eligible for the 2022 Tony Awards, but if a production opened on August 15, 2022, it was eligible for the 2023 Tony Awards. 
 
 ```{r}
-#something like this? : format(as.Date(merged_data_all$date, format="%d/%m/%Y"),"%m")
-
 #code to fix 'year' column issue mentioned above
-for (year in all_relevant_data$year){
+for (i in 1:length(all_relevant_data$year)){
+  year <- all_relevant_data$year[i]
   if (nchar(year) > 4){
-    d = as.Date(year, format = "%B, %d, %Y")
-    if (d >= as.Date(paste(year(date), 05, 01, sep = "-"))){
-      #year = year + 1
+    d <- as.Date(year, format = "%B %d, %Y")
+    
+    #if date is later than start of May
+    if (d >= as.Date(paste(year(d), 05, 01, sep = "-"))){
+      #it is eligible for Tonys during next calender year
+      actual_year <- as.integer(format(as.Date(d, format="%d/%m/%Y"),"%Y")) + 1
+      all_relevant_data$year[i] <- actual_year
     }
+    
     #if date is earlier than end of April
     else{
+      #it is eligible for Tonys in current calender year
+      actual_year <- as.integer(format(as.Date(d, format="%d/%m/%Y"),"%Y"))
+      all_relevant_data$year[i] <- actual_year
       #year = year
     }
+  }
+  #just converting date string into an int
+  else{
+    all_relevant_data$year[i] <- as.integer(all_relevant_data$year[i])
   }
 }
 ```
 
+
 ```{r}
-test = as.Date("Mar, 10, 2002", format= "%B, %d, %Y")
-test
+#get rid of productions that are eligible for the 2024 Tonys as these have not happened yet (only applies to 2 productions in the data)
+#get rid of productions that are eligible for the 2020 (actually 2021) Tonys as the Tonys were odd that year due to Covid (will discuss this more in final paper)
+#get rid of productions that were eligible for pre-1980 Tonys as the data are too sparse
+all_relevant_data <- all_relevant_data[all_relevant_data$year != 2024, ]
+all_relevant_data <- all_relevant_data[all_relevant_data$year != 2020, ]
+all_relevant_data <- all_relevant_data[all_relevant_data$year >= 1980, ]
+length(unique(all_relevant_data$production))
 ```
 
 
-
 ```{r}
-#TO DO: delete this code, shouldn't need it now that you fixed this issue in .ipynb
-#I am doing this for now to account for the missing nom/wins values for productions that did not receive any noms
-#I will fix my web scraping python code later to remedy this issue
-#merged_data_all$nominations[is.na(merged_data_all$nominations)] <- 0
-#merged_data_all$wins[is.na(merged_data_all$wins)] <- 0
-```
-
-```{r}
-#sum(is.na(merged_data_all$type))
-prod_longevity = merged_data_all %>% group_by(production)  %>%
+#only includes productions that had chance to be affected by Tonys
+prod_longevity <- all_relevant_data %>% group_by(production)  %>%
                             summarise(weeks = n(), 
                                       nominations = mean(nominations), 
                                       wins = mean(wins),
-                                      year = mean(year), 
+                                      year = max(year), 
+                                      type = min(type), 
+                                      .groups = 'drop')
+
+#only need this for summary statistics (want to include all productions, even flops and limited engagements)
+prod_longevity_all_prods <- merged_data_all %>% group_by(production)  %>%
+                            summarise(weeks = n(), 
+                                      nominations = mean(nominations), 
+                                      wins = mean(wins),
+                                      year = max(year), 
                                       type = min(type), 
                                       .groups = 'drop')
 
 ```
 
 
+## Summary Statistics
+
 ```{r}
 #average number of weeks that a Broadway production runs (play, musical, special)
-avg_run_len <- mean(prod_longevity$weeks)
+#slightly different number than before because you added more prods in most recent scraping
+avg_run_len <- mean(prod_longevity_all_prods$weeks)
 avg_run_len
 ```
 
 ```{r}
 #median longevity
-median_run_len <- median(prod_longevity$weeks)
+#same number as before 
+median_run_len <- median(prod_longevity_all_prods$weeks)
 median_run_len
 ```
 
 
+```{r}
+#number of productions that are relevant to analysis for each year (i.e. Broadway season)
+prods_per_year <- prod_longevity %>% group_by(year) %>%
+                        summarise(num_prods = n())
 
+mean(prods_per_year$num_prods)
+```
+
+
+```{r}
+#average capacity for each month
+#these results are slightly different now that you've added more productions
+
+#creating column that just has month of year
+merged_data_all$month <- format(as.Date(merged_data_all$date, format="%d/%m/%Y"),"%m")
+monthly_capacity <- merged_data_all %>% 
+    #group_by(month = lubridate::floor_date(date, 'month')) %>%
+    group_by(month) %>%
+    summarize(avg_capacity = format(mean(capacity), scientific = FALSE))
+monthly_capacity
+```
+
+
+## Initial Analysis
 
 ```{r}
 ggplot(prod_longevity, aes(x = wins, y = weeks)) +
@@ -196,7 +224,6 @@ hist(longevity_lm$resid, xlim = c(-500,500), breaks = 30, col = "skyblue")
 
 ```{r}
 spring_awake <- weekly_data[weekly_data$production == 'spring-awakening-448811',] 
-
 pirate_queen <- weekly_data[weekly_data$production == 'the-pirate-queen-426183',] 
 ```
 
@@ -231,14 +258,9 @@ ggplot(pirate_queen, aes(x = date, y = gross))+
 
 
 ```{r}
-#average capacity for each month
-#creating column that just has month of year
-merged_data_all$month <- format(as.Date(merged_data_all$date, format="%d/%m/%Y"),"%m")
-monthly_capacity <- merged_data_all %>% 
-    #group_by(month = lubridate::floor_date(date, 'month')) %>%
-    group_by(month) %>%
-    summarize(avg_capacity = format(mean(capacity), scientific = FALSE))
-monthly_capacity
+#save data needed for next steps
+#write.csv(all_relevant_data, "data/combined_filtered.csv", row.names = FALSE)
+#write.csv(prod_longevity, "data/production_longevity.csv", row.names = FALSE)
 ```
 
 
