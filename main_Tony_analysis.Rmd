@@ -19,15 +19,6 @@ weekly_and_tony <- read_csv("data/combined_filtered.csv", show_col_types = FALSE
 production_longevity <- read_csv("data/production_longevity.csv", show_col_types = FALSE)
 ```
 
-```{r}
-#TO DO: delete this?
-
-#maybe change data so that pre May __ noms are 0 and pre June __ wins are 0 ?
-#estimate breakpoints at x = 05/05/YEAR and x = 06/05/YEAR
-#non_seg_lm <- lm(capacity ~ nominations + wins + date, data = weekly_and_tony)
-#summary(non_seg_lm)
-```
-
 
 ## Interrupted time series analysis
 
@@ -53,6 +44,20 @@ weekly_and_tony$post_awards <- with(weekly_and_tony,
 ```
 
 
+```{r}
+#add column for number of weeks a show has been open on any given week
+#must order rows by date first 
+weekly_and_tony <- weekly_and_tony[order(weekly_and_tony$date), ]
+
+#add column 
+weekly_and_tony$index <- ave(weekly_and_tony$production, FUN = seq_along) 
+weekly_and_tony$weeks_open <- as.numeric(ave(weekly_and_tony$index, weekly_and_tony$production, FUN = seq_along))
+#remove unnecessary index column
+weekly_and_tony = subset(weekly_and_tony, select = -c(index))
+```
+
+
+
 Now I need to change the values of the "nominations" and "wins" columns to reflect the fact that prior to the date of the announcement, all productions had 0 nominations, and prior to the date of the ceremony, productions had 0 wins.
 
 ```{r}
@@ -64,7 +69,18 @@ weekly_and_tony$wins[weekly_and_tony$post_awards == 0] <- 0
 
 ```{r}
 #want to analyze each year separately first
-split_data <- split(weekly_and_tony, f = weekly_and_tony$year)
+split_data_unclean <- split(weekly_and_tony, f = weekly_and_tony$year)
+split_data <- list()
+
+#splitting data changes column names for each year of data. To avoid having to deal with this later, we should change the column names back to what they originally were
+cols_list <- colnames(weekly_and_tony)
+for ( i in 1: length(split_data_unclean)){
+  #change class to data frame for each year
+  df <- as.data.frame(split_data_unclean[i])
+  names(df) <- c(cols_list)
+  #appending df to list where all dfs have the same column names
+  split_data <- append(split_data, list(df))
+}
 
 #split_data
 ```
@@ -77,9 +93,11 @@ Now we are ready to actually perform the interrupted time series analysis
 ```{r}
 #testing this on a random year (2019)
 test <- as.data.frame(split_data[40])
+#names(test) <- c(cols_list)
+
 
 #this graph seems too hectic to include in final report. Probably better to stick to more anecdotal things that you made in previous part, at least for visuals
-ggplot(test, aes(x = X2019.date, y = X2019.capacity, color = X2019.production)) +
+ggplot(test, aes(x = date, y = capacity, color = production)) +
   geom_line() +
   scale_x_date(date_breaks = "1 month", 
                  date_labels = "%b",
@@ -91,12 +109,32 @@ ggplot(test, aes(x = X2019.date, y = X2019.capacity, color = X2019.production)) 
 
 
 ```{r}
-#these results can't be right, maybe test this on one musical first?
-#might go back to logistic regression, not sure
-aint_proud <- test[test$X2019.production == 'aint-too-proud-520004',] 
-test_lm <- lm(X2019.capacity ~ X2019.nominations + X2019.wins, data = aint_proud)
-segmented_test_lm <- segmented(test_lm, seg.Z = ~X2019.date, psi = as.Date("2019-05-01"))
+#Interrupted time series
+#testing on just one production first
+aint_proud <- test[test$production == 'aint-too-proud-520004',] 
+test_tm <- lm(gross ~ date + post_noms + post_awards + weeks_open + nominations + wins, data = aint_proud)
 
+#results indicate that for this show, the weeks it been open negatively affect its capacity (people want to see new things), time after noms led to a 4.8% increase in capacity, time after awards led to a 4.0% increase in capacity (not entirely accurate if you look at actual data for this show. Capacity did increase, but not by that much)
+#did not deem number of Tony noms or wins relevant, probably because I am only looking at one show, so number of noms/wins almost never changes
+summary(test_tm)
+```
+
+```{r}
+#do the same thing as the above chunk but for every 2019-2020 production (still pre-covid)
+
+```
+
+
+
+
+
+```{r}
+#these results for segmented regression seem more accurate than they were before (i.e. when I did not include weeks_open. this var is very relevant to capacity)
+#will stick with time series for now, but will return to this method (maybe use Julian dates?)
+test_lm <- lm(capacity ~ date + nominations + wins + weeks_open, data = aint_proud)
+segmented_test_lm <- segmented(test_lm, seg.Z = ~date, psi = as.Date("2019-05-01"))
+
+#note that I'm only trying to estimate a breakpoint for nominations for now
 summary(segmented_test_lm)
 ```
 
