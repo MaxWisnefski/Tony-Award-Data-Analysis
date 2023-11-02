@@ -10,11 +10,95 @@ knitr::opts_chunk$set(echo = TRUE)
 library(dplyr)
 library(ggplot2)
 library(tidyverse)
-
+library(segmented)
 ```
 
 
 ```{r}
-
+weekly_and_tony <- read_csv("data/combined_filtered.csv", show_col_types = FALSE)
+production_longevity <- read_csv("data/production_longevity.csv", show_col_types = FALSE)
 ```
+
+```{r}
+#TO DO: delete this?
+
+#maybe change data so that pre May __ noms are 0 and pre June __ wins are 0 ?
+#estimate breakpoints at x = 05/05/YEAR and x = 06/05/YEAR
+#non_seg_lm <- lm(capacity ~ nominations + wins + date, data = weekly_and_tony)
+#summary(non_seg_lm)
+```
+
+
+## Interrupted time series analysis
+
+### formatting data 
+
+To perform an interrupted time series analysis, you need two additional columns in the dataframe: One containing a binary variable that is 0 if the date is pre-nominations announcement and 1 if it is after, and another containing a binary variable that is 0 if the date is pre-ceremony date and 1 if it is after. 
+
+
+```{r}
+#TO DO: add new var that is weeks open (important for predicting)
+
+#TO DO (maybe): get exact dates of noms announcement and ceremony for every year instead of defaulting to May 1 and June 5
+
+#adding this column for noms annoucement
+weekly_and_tony$post_noms <- with(weekly_and_tony,
+                                  ifelse(weekly_and_tony$date < as.Date(
+                                    paste(weekly_and_tony$year, 05, 01, sep = "-")), 0, 1))
+
+#adding this column for ceremony date
+weekly_and_tony$post_awards <- with(weekly_and_tony,
+                                  ifelse(weekly_and_tony$date < as.Date(
+                                    paste(weekly_and_tony$year, 06, 05, sep = "-")), 0, 1))
+```
+
+
+Now I need to change the values of the "nominations" and "wins" columns to reflect the fact that prior to the date of the announcement, all productions had 0 nominations, and prior to the date of the ceremony, productions had 0 wins.
+
+```{r}
+#implementing this change
+weekly_and_tony$nominations[weekly_and_tony$post_noms == 0] <- 0
+weekly_and_tony$wins[weekly_and_tony$post_awards == 0] <- 0
+```
+
+
+```{r}
+#want to analyze each year separately first
+split_data <- split(weekly_and_tony, f = weekly_and_tony$year)
+
+#split_data
+```
+
+
+### analysis
+
+Now we are ready to actually perform the interrupted time series analysis
+
+```{r}
+#testing this on a random year (2019)
+test <- as.data.frame(split_data[40])
+
+#this graph seems too hectic to include in final report. Probably better to stick to more anecdotal things that you made in previous part, at least for visuals
+ggplot(test, aes(x = X2019.date, y = X2019.capacity, color = X2019.production)) +
+  geom_line() +
+  scale_x_date(date_breaks = "1 month", 
+                 date_labels = "%b",
+                 limits = as.Date(c('2018-05-01','2019-09-01'))) +
+  #ggtitle("") +
+  theme_bw() +
+  theme(legend.position = "none")
+```
+
+
+```{r}
+#these results can't be right, maybe test this on one musical first?
+#might go back to logistic regression, not sure
+aint_proud <- test[test$X2019.production == 'aint-too-proud-520004',] 
+test_lm <- lm(X2019.capacity ~ X2019.nominations + X2019.wins, data = aint_proud)
+segmented_test_lm <- segmented(test_lm, seg.Z = ~X2019.date, psi = as.Date("2019-05-01"))
+
+summary(segmented_test_lm)
+```
+
+
 
