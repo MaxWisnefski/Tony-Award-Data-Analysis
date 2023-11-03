@@ -24,12 +24,17 @@ production_longevity <- read_csv("data/production_longevity.csv", show_col_types
 
 ### formatting data 
 
+```{r}
+#adding a column for Julian date (might not be important, we'll see)
+weekly_and_tony$julian_date <- julian(weekly_and_tony$date) #as.numeric(format(weekly_and_tony$date, "%j"))
+```
+
+
+
 To perform an interrupted time series analysis, you need two additional columns in the dataframe: One containing a binary variable that is 0 if the date is pre-nominations announcement and 1 if it is after, and another containing a binary variable that is 0 if the date is pre-ceremony date and 1 if it is after. 
 
 
 ```{r}
-#TO DO: add new var that is weeks open (important for predicting)
-
 #TO DO (maybe): get exact dates of noms announcement and ceremony for every year instead of defaulting to May 1 and June 5
 
 #adding this column for noms annoucement
@@ -112,30 +117,58 @@ ggplot(test, aes(x = date, y = capacity, color = production)) +
 #Interrupted time series
 #testing on just one production first
 aint_proud <- test[test$production == 'aint-too-proud-520004',] 
-test_tm <- lm(gross ~ date + post_noms + post_awards + weeks_open + nominations + wins, data = aint_proud)
+aint_proud_tm <- lm(capacity ~ julian_date + post_noms + post_awards + weeks_open + nominations + wins, data = aint_proud)
 
 #results indicate that for this show, the weeks it been open negatively affect its capacity (people want to see new things), time after noms led to a 4.8% increase in capacity, time after awards led to a 4.0% increase in capacity (not entirely accurate if you look at actual data for this show. Capacity did increase, but not by that much)
 #did not deem number of Tony noms or wins relevant, probably because I am only looking at one show, so number of noms/wins almost never changes
-summary(test_tm)
+summary(aint_proud_tm)
 ```
 
 ```{r}
 #do the same thing as the above chunk but for every 2019-2020 production (still pre-covid)
-
+test_tm <- lm(capacity ~ julian_date + post_noms + post_awards + weeks_open + nominations + wins, data = test)
+summary(test_tm)
 ```
 
 
+```{r}
+test_lm <- lm(capacity ~ julian_date + nominations + wins + weeks_open, data = aint_proud)
+segmented_test_lm <- segmented(test_lm, seg.Z = ~julian_date, 
+                               psi = julian(as.Date("2019-05-01")))
+
+#just for one random musical (Ain't too Proud)
+summary(segmented_test_lm)
+```
 
 
 
 ```{r}
 #these results for segmented regression seem more accurate than they were before (i.e. when I did not include weeks_open. this var is very relevant to capacity)
-#will stick with time series for now, but will return to this method (maybe use Julian dates?)
-test_lm <- lm(capacity ~ date + nominations + wins + weeks_open, data = aint_proud)
-segmented_test_lm <- segmented(test_lm, seg.Z = ~date, psi = as.Date("2019-05-01"))
+test_lm <- lm(capacity ~ julian_date + nominations + wins + weeks_open, data = test)
+segmented_test_lm <- segmented(test_lm, seg.Z = ~julian_date, 
+                               psi = julian(as.Date("2019-05-01")))
 
-#note that I'm only trying to estimate a breakpoint for nominations for now
+#estimates breakpoint as being right after awards (June 15, 2019)
+#this might be better option than time series?  
 summary(segmented_test_lm)
+```
+
+
+
+
+```{r}
+#how to convert Julian date back into regular date (the default origin is Jan 1, 1970)
+
+#extracting breakpoint date from model 
+x <- segmented_test_lm$indexU$julian_date
+x2<- as.Date(x, origin = as.Date("1970-01-01"))
+x2
+```
+
+
+
+```{r}
+#TO DO: do longevity analysis for each year and make time series of results???
 ```
 
 
