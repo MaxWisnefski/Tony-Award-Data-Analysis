@@ -20,7 +20,42 @@ production_longevity <- read_csv("data/production_longevity.csv", show_col_types
 ```
 
 
-## Interrupted time series analysis
+## Longevity analysis
+
+```{r}
+#want to analyze each year separately first
+split_data_unclean <- split(production_longevity, f = production_longevity$year)
+split_longev <- list()
+
+#splitting data changes column names for each year of data. To avoid having to deal with this later, we should change the column names back to what they originally were
+cols_list <- colnames(production_longevity)
+for ( i in 1: length(split_data_unclean)){
+  #change class to data frame for each year
+  df <- as.data.frame(split_data_unclean[i])
+  names(df) <- c(cols_list)
+  #appending df to list where all dfs have the same column names
+  split_longev <- append(split_longev, list(df))
+}
+```
+
+
+```{r}
+long_coeffs <- list()
+long_signif <- list()
+for (df in split_longev){
+  longevity_lm <- lm(weeks ~ nominations + wins, data = df)
+  coeffs <- longevity_lm$coefficients
+  long_coeffs <- append(long_coeffs, list(coeffs))
+
+  p_vals <- summary(longevity_lm)$coefficients[,4] 
+  r_sqr <- summary(longevity_lm)$adj.r.squared
+  long_signif <- append(long_signif, list(p_vals, r_sqr))
+  
+}
+```
+
+
+## Segmented regression and interrupted time series analysis
 
 ### formatting data 
 
@@ -158,21 +193,19 @@ summary(segmented_test_lm)
 
 
 ```{r}
-#how to convert Julian date back into regular date (the default origin is Jan 1, 1970)
-
 #extracting two breakpoint dates from the model 
-breaks_julian <- segmented_test_lm$indexU$julian_date
-
+breaks_julian <- segmented_test_lm$indexU$date
+#how to convert Julian date back into regular date (the default origin is Jan 1, 1970)
+breaks <- as.Date(breaks_julian, origin = "1970-01-01")
 #coefficients for all vars
 coeffs <- segmented_test_lm$coefficients
-
 #p-values for all vars
 p_vals <- summary(segmented_test_lm)$coefficients[,4] 
-
 #adjusted r-squared
 r_sqr <- summary(segmented_test_lm)$adj.r.squared
 
 breaks_julian
+breaks
 coeffs
 #coeffs["nominations"]
 p_vals
@@ -180,11 +213,49 @@ r_sqr
 ```
 
 
-
 ```{r}
 #TO DO: do longevity analysis for each year and make time series of results???
+#creating an lol that will store results of each model as row of data
+breaks_lol <- list()
+coeffs_lol <- list()
+signif_lol <- list()
 
+for (df in split_data){
+   # data for 1980 starts on date of 1980 Tonys (June 8, 1980), so there will not be breakpoints for this first model
+  if (df$year[1] == 1980){
+    segmented_year_lm <- lm(capacity ~ date + nominations + wins + weeks_open, data = df)
+  }
+  else{
+    year_lm <- lm(capacity ~ date + nominations + wins + weeks_open, data = df)
+    segmented_year_lm <- segmented(year_lm, seg.Z = ~date, 
+                                  psi = c(as.Date(paste(df$year[1], 05, 01, sep = "-")),
+                                          as.Date(paste(df$year[1], 06, 05, sep = "-"))))
+  }
+
+  breaks_julian <- segmented_year_lm$indexU$date
+  breaks <- as.Date(breaks_julian, origin = "1970-01-01")
+  coeffs <- segmented_year_lm$coefficients
+  p_vals <- summary(segmented_year_lm)$coefficients[,4] 
+  r_sqr <- summary(segmented_year_lm)$adj.r.squared
+  
+  breaks_list <- c(breaks)
+  breaks_lol <- append(breaks_lol, list(breaks_list))
+  
+  year_coeffs <- c(coeffs, df$year[1])
+  coeffs_lol <- append(coeffs_lol, list(year_coeffs))
+  
+  year_signif <- c(p_vals, r_sqr, df$year[1])
+  signif_lol <- append(signif_lol, list(year_signif))
+  
+  #split_data <- append(split_data, list(df)) 
+}
+#as.Date(paste(year, 05, 01, sep = "-"))
 ```
 
+
+
+```{r}
+summary(segmented_year_lm)
+```
 
 
