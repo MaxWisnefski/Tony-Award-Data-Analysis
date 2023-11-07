@@ -11,6 +11,7 @@ library(dplyr)
 library(ggplot2)
 library(tidyverse)
 library(magrittr)
+library(car)
 ```
 
 
@@ -204,6 +205,13 @@ ggplot(prod_longevity, aes(x = nominations, y = weeks)) +
 longevity_lm <- lm(weeks ~ nominations + wins, data = prod_longevity)
 summary(longevity_lm)
 ```
+
+
+```{r}
+#this indicates that there is a small correlation between nominations and wins (obviously), but it is not large enough to be a serious issue of multicollinearity
+vif(longevity_lm)
+```
+
 
 ### Checking assumptions of the Linear Regression model
 
