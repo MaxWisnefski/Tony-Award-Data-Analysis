@@ -11,6 +11,7 @@ library(dplyr)
 library(ggplot2)
 library(tidyverse)
 library(segmented)
+library(nlme)
 ```
 
 
@@ -23,6 +24,9 @@ production_longevity <- read_csv("data/production_longevity.csv", show_col_types
 ## Longevity analysis
 
 ```{r}
+#remove outlier productions (probably should not do this. The fact that these productions stayed open unusally long makes them important)
+#production_longevity <- production_longevity[production_longevity$weeks <= 500, ]
+
 #want to analyze each year separately first
 split_data_unclean <- split(production_longevity, f = production_longevity$year)
 split_longev <- list()
@@ -44,14 +48,82 @@ long_coeffs <- list()
 long_signif <- list()
 for (df in split_longev){
   longevity_lm <- lm(weeks ~ nominations + wins, data = df)
-  coeffs <- longevity_lm$coefficients
+  coeffs <- c(longevity_lm$coefficients, df$year[1])
   long_coeffs <- append(long_coeffs, list(coeffs))
 
   p_vals <- summary(longevity_lm)$coefficients[,4] 
   r_sqr <- summary(longevity_lm)$adj.r.squared
-  long_signif <- append(long_signif, list(p_vals, r_sqr))
+  CI <- confint(longevity_lm, level=0.95)
+  signif_list <- c(p_vals, r_sqr, CI, df$year[1])
+  long_signif <- append(long_signif, list(signif_list))
   
 }
+
+#confint(longevity_lm,level=0.95)
+```
+
+
+```{r}
+long_coeffs_df <- as.data.frame(do.call(rbind, long_coeffs))
+colnames(long_coeffs_df) <- c("intercept_coeff", "noms_coeff", "wins_coeff", "year")
+
+long_signif_df <- as.data.frame(do.call(rbind, long_signif))
+colnames(long_signif_df) <- c("intercept_pval", "noms_pval", "wins_pval", 
+                              "rsqr", "CI_1_int", "CI_1_noms", "CI_1_wins", 
+                              "CI_2_int", "CI_2_noms", "CI_2_wins", "year")
+
+long_lm_df <- merge(long_coeffs_df, long_signif_df)
+```
+
+
+```{r}
+ggplot(long_lm_df, aes(x = wins_coeff, y = year)) +
+  geom_vline(xintercept = 0,lwd=1,colour="black", linetype = 2) +
+  geom_errorbar(aes(xmin = CI_1_wins, xmax = CI_2_wins), alpha = 2,color = "skyblue") + 
+  geom_point(color = "maroon") +
+  labs(x = "wins effect size") +
+  ggtitle("Effect Size of Wins on Longevity\nfor Every Year (1980-2023)") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+ggplot(long_lm_df, aes(x = noms_coeff, y = year)) +
+  geom_vline(xintercept = 0,lwd=1,colour="black", linetype = 2) +
+  geom_errorbar(aes(xmin = CI_1_noms, xmax = CI_2_noms), alpha = 2,color = "skyblue") + 
+  geom_point(color = "maroon") +
+  labs(x = "nominations effect size") +
+  ggtitle("Effect Size of Nominations on Longevity\nfor Every Year (1980-2023)") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+
+It is important to note that the years that produced models with very large confidence intervals are all years that had an outlier production that stayed open for an unusually long time. 1988 has Phantom of the Opera, 1998 has The Lion King, 2004 has Wicked, and 2014 has Aladdin. 
+
+
+```{r}
+ggplot(long_lm_df, aes(x = noms_coeff)) +
+  geom_histogram(color = "black", fill = "skyblue") +
+  geom_vline(xintercept = 0,lwd=.5,colour="maroon", linetype = 2) +
+  ggtitle("Distribution of Yearly Regression Model Slopes for Nominations") +
+  labs(x = "nominations effect size") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+ggplot(long_lm_df, aes(x = wins_coeff)) +
+  geom_histogram(color = "black", fill = "skyblue") +
+  geom_vline(xintercept = 0,lwd=.5,colour="maroon", linetype = 2) +
+  ggtitle("Distribution of Yearly Regression Model Slopes for Nominations") +
+  labs(x = "wins effect size") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+```{r}
+#many of the models only fit the data moderately well
+mean(long_lm_df$rsqr)
+median(long_lm_df$rsqr)
 ```
 
 
@@ -59,9 +131,10 @@ for (df in split_longev){
 
 ### formatting data 
 
+
 ```{r}
 #adding a column for Julian date (might not be important, we'll see)
-weekly_and_tony$julian_date <- julian(weekly_and_tony$date) #as.numeric(format(weekly_and_tony$date, "%j"))
+weekly_and_tony$julian_date <- julian(weekly_and_tony$date) as.numeric(format(weekly_and_tony$date, "%j"))
 ```
 
 
@@ -97,7 +170,6 @@ weekly_and_tony = subset(weekly_and_tony, select = -c(index))
 ```
 
 
-
 Now I need to change the values of the "nominations" and "wins" columns to reflect the fact that prior to the date of the announcement, all productions had 0 nominations, and prior to the date of the ceremony, productions had 0 wins.
 
 ```{r}
@@ -126,9 +198,10 @@ for ( i in 1: length(split_data_unclean)){
 ```
 
 
-### analysis
+### segmented regression
 
-Now we are ready to actually perform the interrupted time series analysis
+Note that after writing the code for the segmented regression, I decided it was not a viable form of analysis for this project. I am keeping the code for now because I think it is worth preserving my thought process. The kind of segmented regression I originally wrote code for finds breakpoints on its own. However, for this project, we know the breakpoints a priori; They are the date of the nominations announcement and the date of the ceremony. Therefore, we want a model that has pre-specified breakpoints. 
+
 
 ```{r}
 #testing this on a random year (2019)
@@ -148,25 +221,9 @@ ggplot(test, aes(x = date, y = capacity, color = production)) +
 ```
 
 
+
 ```{r}
-#Interrupted time series
-#testing on just one production first
 aint_proud <- test[test$production == 'aint-too-proud-520004',] 
-aint_proud_tm <- lm(capacity ~ julian_date + post_noms + post_awards + weeks_open + nominations + wins, data = aint_proud)
-
-#results indicate that for this show, the weeks it been open negatively affect its capacity (people want to see new things), time after noms led to a 4.8% increase in capacity, time after awards led to a 4.0% increase in capacity (not entirely accurate if you look at actual data for this show. Capacity did increase, but not by that much)
-#did not deem number of Tony noms or wins relevant, probably because I am only looking at one show, so number of noms/wins almost never changes
-summary(aint_proud_tm)
-```
-
-```{r}
-#do the same thing as the above chunk but for every 2019-2020 production (still pre-covid)
-test_tm <- lm(capacity ~ julian_date + post_noms + post_awards + weeks_open + nominations + wins, data = test)
-summary(test_tm)
-```
-
-
-```{r}
 test_lm <- lm(capacity ~ julian_date + nominations + wins + weeks_open, data = aint_proud)
 segmented_test_lm <- segmented(test_lm, seg.Z = ~julian_date, 
                                psi = julian(as.Date("2019-05-01")))
@@ -185,7 +242,6 @@ segmented_test_lm <- segmented(test_lm, seg.Z = ~julian_date,
                                        julian(as.Date("2019-06-05"))))
 
 #estimates breakpoint as being right after awards (June 15, 2019)
-#this might be better option than time series?  
 summary(segmented_test_lm)
 ```
 
@@ -204,18 +260,16 @@ p_vals <- summary(segmented_test_lm)$coefficients[,4]
 #adjusted r-squared
 r_sqr <- summary(segmented_test_lm)$adj.r.squared
 
-breaks_julian
-breaks
-coeffs
+#breaks_julian
+#breaks
+#coeffs
 #coeffs["nominations"]
-p_vals
-r_sqr
+#p_vals
+#r_sqr
 ```
 
 
 ```{r}
-#TO DO: do longevity analysis for each year and make time series of results???
-#creating an lol that will store results of each model as row of data
 breaks_lol <- list()
 coeffs_lol <- list()
 signif_lol <- list()
@@ -255,7 +309,155 @@ for (df in split_data){
 
 
 ```{r}
-summary(segmented_year_lm)
+#summary(segmented_year_lm)
+```
+
+### Interrupted time series
+
+Before I do the next part of my analysis, I want to do a simple linear regression to examine the relationship between the number of weeks since a production opened and the productions capacity in that week.
+
+
+```{r}
+#removing outliers barely affected results
+
+ggplot(weekly_and_tony, aes(x = weeks_open, y = capacity)) +
+  geom_jitter(color = 'maroon') +
+  #not sure why line of best fit won't show up
+  geom_smooth(method = "lm", color = 'skyblue') +
+  labs(x = "weeks since opening", y = "weekly capcity") +
+  ggtitle("Effect of Weeks Since Opening on Weekly Capacity") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5), legend.position = "None")
+```
+
+
+```{r}
+capacity_lm <- lm(capacity ~ weeks_open, data = weekly_and_tony)
+summary(capacity_lm)
+CI <- confint(capacity_lm)
+CI
+```
+
+While the effect of weeks since opening on capacity is statistically significant, it is actually a significantly smaller effect than expected, and it is almost negligible. It may not be worth including in my time series model
+
+
+```{r}
+#Interrupted time series
+#testing on just one production first
+#aint_proud_tm <- lm(capacity ~ julian_date + post_noms + post_awards + weeks_open + nominations + wins, data = aint_proud)
+
+aint_proud_tm <- lm(capacity ~ nominations + wins + weeks_open, data = aint_proud)
+
+#results indicate that for this show, the weeks it been open negatively affect its capacity (people want to see new things), time after noms led to a 4.8% increase in capacity, time after awards led to a 4.0% increase in capacity (not entirely accurate if you look at actual data for this show. Capacity did increase, but not by that much)
+#did not deem number of Tony noms or wins relevant, probably because I am only looking at one show, so number of noms/wins almost never changes
+summary(aint_proud_tm)
+```
+
+
+```{r}
+#do the same thing as the above chunk but for every 2018-2019 production
+#make post_noms/awards into one column 
+#test_tm <- lm(capacity ~ julian_date + post_noms + post_awards + weeks_open + nominations + wins, data = test)
+
+#ADD VAR that is weeks post awards???
+test_tm <- lm(capacity ~ nominations*weeks_open + wins*weeks_open, data = test)
+
+summary(test_tm)
+```
+
+
+```{r}
+ts_coeffs <- list()
+ts_signif <- list()
+for (df in split_data){
+  #longevity_lm <- lm(weeks ~ nominations + wins, data = df)
+  #ts <- lm(capacity ~ julian_date + post_noms + post_awards + 
+  #          weeks_open + nominations + wins, data = df)
+  
+  ts <- lm(capacity ~ nominations*weeks_open + wins*weeks_open, data = df)
+  #ts <- lm(capacity ~ nominations + wins + weeks_open, data = df)
+  
+  coeffs <- c(ts$coefficients, df$year[1])
+  ts_coeffs <- append(ts_coeffs, list(coeffs))
+  p_vals <- summary(ts)$coefficients[,4] 
+  r_sqr <- summary(ts)$adj.r.squared
+  CI <- confint(ts, level=0.95)
+  signif_list <- c(p_vals, r_sqr, CI, df$year[1])
+  ts_signif <- append(ts_signif, list(signif_list))
+}
+```
+
+
+```{r}
+#making the results of the above chunk into a dataframe and making sure the column names make sense
+ts_coeffs_df <- as.data.frame(do.call(rbind, ts_coeffs))
+colnames(ts_coeffs_df) <- c("intercept_coeff", "noms_coeff", "weeks_open_coeff",
+                              "wins_coeff", "noms_weeks_coeff", "wins_weeks_coeff", "year")
+
+ts_signif_df <- as.data.frame(do.call(rbind, ts_signif))
+colnames(ts_signif_df) <- c("intercept_pval", "noms_pval",  "weeks_open_pval", 
+                            "wins_pval", "noms_weeks_pval", "wins_weeks_pval",
+                            "rsqr", "CI_1_int", "CI_1_noms", "CI_1_weeks", "CI_1_wins",
+                            "CI_1_noms_weeks", "CI_1_wins_weeks", 
+                            "CI_2_int", "CI_2_noms", "CI_2_weeks", "CI_2_wins",
+                            "CI_2_noms_weeks", "CI_2_wins_weeks", "year")
+
+ts_df <- merge(ts_coeffs_df, ts_signif_df)
+```
+
+
+```{r}
+#plotting all of the results
+ggplot(ts_df, aes(x = wins_coeff, y = year)) +
+  geom_vline(xintercept = 0,lwd=1,colour="black", linetype = 2) +
+  geom_errorbar(aes(xmin = CI_1_wins, xmax = CI_2_wins), alpha = 2,color = "skyblue") + 
+  geom_point(color = "maroon") +
+  labs(x = "wins effect size") +
+  ggtitle("Effect Size of Wins on Capacity\nfor Every Year (1980-2023)") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+ggplot(ts_df, aes(x = noms_coeff, y = year)) +
+  geom_vline(xintercept = 0,lwd=1,colour="black", linetype = 2) +
+  geom_errorbar(aes(xmin = CI_1_noms, xmax = CI_2_noms), alpha = 2,color = "skyblue") + 
+  geom_point(color = "maroon") +
+  labs(x = "nominations effect size") +
+  ggtitle("Effect Size of Nominations on Capacity\nfor Every Year (1980-2023)") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+ggplot(ts_df, aes(x = weeks_open_coeff, y = year)) +
+  geom_vline(xintercept = 0,lwd=1,colour="black", linetype = 2) +
+  geom_errorbar(aes(xmin = CI_1_weeks, xmax = CI_2_weeks), alpha = 2,color = "skyblue") + 
+  geom_point(color = "maroon") +
+  labs(x = "weeks since opening effect size") +
+  ggtitle("Effect Size of Weeks Since Opening on\nCapacity for Every Year (1980-2023)") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+ggplot(ts_df, aes(x = noms_weeks_coeff, y = year)) +
+  geom_vline(xintercept = 0,lwd=1,colour="black", linetype = 2) +
+  geom_errorbar(aes(xmin = CI_1_noms_weeks, xmax = CI_2_noms_weeks), alpha = 2,color = "skyblue") + 
+  geom_point(color = "maroon") +
+  labs(x = "effect size of the interaction between Nominations and weeks since opening") +
+  ggtitle("Effect Size of the Interaction between Weeks\nSince Opening and nominations on Capacity\nfor Every Year (1980-2023)") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+ggplot(ts_df, aes(x = wins_weeks_coeff, y = year)) +
+  geom_vline(xintercept = 0,lwd=1,colour="black", linetype = 2) +
+  geom_errorbar(aes(xmin = CI_1_wins_weeks, xmax = CI_2_wins_weeks), alpha = 2,color = "skyblue") + 
+  geom_point(color = "maroon") +
+  labs(x = "effect size of the interaction between wins and weeks since opening") +
+  ggtitle("Effect Size of the Interaction between Weeks\nSince Opening and Wins on Capacity\nfor Every Year (1980-2023)") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r}
+#relevant to note that adjusted r-squared indicates a poor fit
+mean(ts_df$rsqr)
+median(ts_df$rsqr)
 ```
 
 
