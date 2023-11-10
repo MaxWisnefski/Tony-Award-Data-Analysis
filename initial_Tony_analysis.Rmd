@@ -205,6 +205,10 @@ ggplot(prod_longevity, aes(x = nominations, y = weeks)) +
 longevity_lm <- lm(weeks ~ nominations + wins, data = prod_longevity)
 summary(longevity_lm)
 ```
+```{r}
+#calculating confidence interval
+confint(longevity_lm, level=0.95)
+```
 
 
 ```{r}
