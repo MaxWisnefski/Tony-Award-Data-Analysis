@@ -11,29 +11,33 @@ library(dplyr)
 library(ggplot2)
 library(tidyverse)
 library(segmented)
-library(nlme)
+library(ggpubr)
+#library(nlme) for nonlinear mixed effects, could be useful in the future?
 ```
 
 
 ```{r}
+#filtered data
 weekly_and_tony <- read_csv("data/combined_filtered.csv", show_col_types = FALSE)
 production_longevity <- read_csv("data/production_longevity.csv", show_col_types = FALSE)
 ```
 
 
-## Longevity analysis
+## Longevity Analysis
+
+This is a continuation of the regression analysis done in initial_Tony_analysis.Rmd. However, instead of creating one model, we will make a separate model for each year of data. 
 
 ```{r}
-#production_longevity <- production_longevity[production_longevity$weeks <= 500, ]
+#getting rid of specials since their longevity is fixed and cannot be impacted by Tony outcomes
 production_longevity <- production_longevity[production_longevity$type != "special", ]
-#want to analyze each year separately first
+#split data to analyze each year separately
 split_data_unclean <- split(production_longevity, f = production_longevity$year)
 split_longev <- list()
 
 #splitting data changes column names for each year of data. To avoid having to deal with this later, we should change the column names back to what they originally were
 cols_list <- colnames(production_longevity)
 for ( i in 1: length(split_data_unclean)){
-  #change class to data frame for each year
+  #change class to dataframe for each year
   df <- as.data.frame(split_data_unclean[i])
   names(df) <- c(cols_list)
   #appending df to list where all dfs have the same column names
@@ -43,26 +47,31 @@ for ( i in 1: length(split_data_unclean)){
 
 
 ```{r}
+#creating lists to store the results of all 42 models
+#this list stores coefficients (effect sizes) for predictors and intercept
 long_coeffs <- list()
+
+#this one stores all p-values, r-squared, and confidence intervals
 long_signif <- list()
+
 for (df in split_longev){
+  #running the model for each year
   longevity_lm <- lm(weeks ~ nominations + wins, data = df)
   coeffs <- c(longevity_lm$coefficients, df$year[1])
+  #storing output in long_coeffs
   long_coeffs <- append(long_coeffs, list(coeffs))
-
   p_vals <- summary(longevity_lm)$coefficients[,4] 
   r_sqr <- summary(longevity_lm)$adj.r.squared
   CI <- confint(longevity_lm, level=0.95)
   signif_list <- c(p_vals, r_sqr, CI, df$year[1])
+  #storing output in long_signif
   long_signif <- append(long_signif, list(signif_list))
-  
 }
-
-#confint(longevity_lm,level=0.95)
 ```
 
 
 ```{r}
+#making the lists into dataframes and changing column names to things that make sense
 long_coeffs_df <- as.data.frame(do.call(rbind, long_coeffs))
 colnames(long_coeffs_df) <- c("intercept_coeff", "noms_coeff", "wins_coeff", "year")
 
@@ -71,11 +80,15 @@ colnames(long_signif_df) <- c("intercept_pval", "noms_pval", "wins_pval",
                               "rsqr", "CI_1_int", "CI_1_noms", "CI_1_wins", 
                               "CI_2_int", "CI_2_noms", "CI_2_wins", "year")
 
+#merging the two dataframes
 long_lm_df <- merge(long_coeffs_df, long_signif_df)
 ```
 
 
+The next chunk creates visuals that allow us to see if and to what extent the impact of nominations/wins (on longevity) has changed over the last 40 years.
+
 ```{r}
+#visualizing the results of the 42 models
 wins_effect_plot <- ggplot(long_lm_df, aes(x = wins_coeff, y = year)) +
   geom_vline(xintercept = 0,lwd=1,colour="black", linetype = 2) +
   geom_errorbar(aes(xmin = CI_1_wins, xmax = CI_2_wins), alpha = 2,color = "skyblue") + 
@@ -100,12 +113,13 @@ ggarrange(noms_effect_plot, wins_effect_plot, ncol = 1, nrow = 2,  labels = "AUT
 #ggsave("visuals/noms_wins_effect_longev.png", bg = "transparent", height = 10, width = 8)
 ```
 
-
-
 It is important to note that the years that produced models with very large confidence intervals are all years that had an outlier production that stayed open for an unusually long time. 1988 has Phantom of the Opera, 1998 has The Lion King, 2004 has Wicked, and 2014 has Aladdin. 
 
 
+The histograms below show us the distribution of effect sizes for nominations/wins across all of the models.
+
 ```{r}
+#visualizing the results of the 42 models
 noms_effect_hist_longev <- ggplot(long_lm_df, aes(x = noms_coeff)) +
   geom_histogram(color = "black", fill = "skyblue") +
   geom_vline(xintercept = 0,lwd=.5,colour="maroon", linetype = 2) +
@@ -136,26 +150,22 @@ median(long_lm_df$rsqr)
 ```
 
 
-## Segmented regression and interrupted time series analysis
+## Formatting Data for Segmented Regression and Moderated Multiple Regression
 
-### formatting data 
-
+NOTE: Segmented regression did not end up being part of this analysis because it assumes you do not know the breakpoints a priori. However, we do know the breakpoints a priori; they are the date of nomination announcements, and the date of the award ceremony. I have kept the code for segmented regression for now because it seems wise to not delete the code even if I am not currently planning on using it.
 
 ```{r}
-#adding a column for Julian date (might not be important, we'll see)
+#adding a column for Julian date (did not end up being necessary, but we will keep it anyway)
 weekly_and_tony$julian_date <- julian(weekly_and_tony$date) 
 #other method for julian date
 #as.numeric(format(weekly_and_tony$date, "%j"))
 ```
 
 
-
-To perform an interrupted time series analysis, you need two additional columns in the dataframe: One containing a binary variable that is 0 if the date is pre-nominations announcement and 1 if it is after, and another containing a binary variable that is 0 if the date is pre-ceremony date and 1 if it is after. 
+The next chunk was intended to be relevant to the interrupted time series, but I ended up performing moderated multiple regression instead. We will keep this chunk for now, as it could be useful in the next month. The chunk adds two new columns to the data: a column that is 0 if the date is pre-nomination announcement and 1 if the date is post-announcement, and a column that is 0 if the date is pre-ceremony, and 1 if the date is post-ceremony. 
 
 
 ```{r}
-#TO DO (maybe): get exact dates of noms announcement and ceremony for every year instead of defaulting to May 1 and June 5
-
 #adding this column for noms annoucement
 weekly_and_tony$post_noms <- with(weekly_and_tony,
                                   ifelse(weekly_and_tony$date < as.Date(
@@ -167,6 +177,8 @@ weekly_and_tony$post_awards <- with(weekly_and_tony,
                                     paste(weekly_and_tony$year, 06, 05, sep = "-")), 0, 1))
 ```
 
+
+The next chunk adds a column that specifies the number of weeks that have passed since a production opened for each week of data. This will be important when we do moderated multiple regression
 
 ```{r}
 #add column for number of weeks a show has been open on any given week
@@ -181,7 +193,7 @@ weekly_and_tony = subset(weekly_and_tony, select = -c(index))
 ```
 
 
-Now I need to change the values of the "nominations" and "wins" columns to reflect the fact that prior to the date of the announcement, all productions had 0 nominations, and prior to the date of the ceremony, productions had 0 wins.
+Now we need to change the values of the "nominations" and "wins" columns to reflect the fact that prior to the date of the announcement, all productions for a given year had 0 nominations, and prior to the date of the ceremony, all productions for a given year had 0 wins.
 
 ```{r}
 #implementing this change
@@ -209,9 +221,9 @@ for ( i in 1: length(split_data_unclean)){
 ```
 
 
-### segmented regression
+## Segmented Regression
 
-Note that after writing the code for the segmented regression, I decided it was not a viable form of analysis for this project. I am keeping the code for now because I think it is worth preserving my thought process. The kind of segmented regression I originally wrote code for finds breakpoints on its own. However, for this project, we know the breakpoints a priori; They are the date of the nominations announcement and the date of the ceremony. Therefore, we want a model that has pre-specified breakpoints. 
+NOTE (again): after writing the code for the segmented regression, I decided it was not a viable form of analysis for this project. I am keeping the code for now because I think it is worth preserving my thought process, and some of the code could be useful in the next month. The kind of segmented regression I originally wrote code for finds breakpoints on its own. However, for this project, we know the breakpoints a priori.
 
 
 ```{r}
@@ -219,8 +231,7 @@ Note that after writing the code for the segmented regression, I decided it was 
 test <- as.data.frame(split_data[40])
 #names(test) <- c(cols_list)
 
-
-#this graph seems too hectic to include in final report. Probably better to stick to more anecdotal things that you made in previous part, at least for visuals
+#plotting weekly capacity for all shows from the 2018 - 2019 season
 ggplot(test, aes(x = date, y = capacity, color = production)) +
   geom_line() +
   scale_x_date(date_breaks = "1 month", 
@@ -231,9 +242,11 @@ ggplot(test, aes(x = date, y = capacity, color = production)) +
   theme(legend.position = "none")
 ```
 
+Note that the above visual is not in the final paper. It is too difficult to interept what's going on here and too difficult to distinguish between different productions
 
 
 ```{r}
+#making dataframe for just one musical
 aint_proud <- test[test$production == 'aint-too-proud-520004',] 
 test_lm <- lm(capacity ~ julian_date + nominations + wins + weeks_open, data = aint_proud)
 segmented_test_lm <- segmented(test_lm, seg.Z = ~julian_date, 
@@ -246,7 +259,7 @@ summary(segmented_test_lm)
 
 
 ```{r}
-#these results for segmented regression seem more accurate than they were before (i.e. when I did not include weeks_open. this var is very relevant to capacity)
+#these results for segmented regression seem more accurate than they were before (i.e. when I did not include weeks_open. this variable seems relevant to capacity)
 test_lm <- lm(capacity ~ julian_date + nominations + wins + weeks_open, data = test)
 segmented_test_lm <- segmented(test_lm, seg.Z = ~julian_date, 
                                psi = c(julian(as.Date("2019-05-01")),
@@ -255,8 +268,6 @@ segmented_test_lm <- segmented(test_lm, seg.Z = ~julian_date,
 #estimates breakpoint as being right after awards (June 15, 2019)
 summary(segmented_test_lm)
 ```
-
-
 
 
 ```{r}
@@ -279,6 +290,8 @@ r_sqr <- summary(segmented_test_lm)$adj.r.squared
 #r_sqr
 ```
 
+
+In the next chunk, I began the process of gathering the results of all 42 segmented regression models into one dataframe, but before I finished, I decided not to use this form of analysis. Therefore, this next chunk is a bit unfinished.
 
 ```{r}
 breaks_lol <- list()
@@ -323,37 +336,11 @@ for (df in split_data){
 #summary(segmented_year_lm)
 ```
 
-### Interrupted time series
-
-Before I do the next part of my analysis, I want to do a simple linear regression to examine the relationship between the number of weeks since a production opened and the productions capacity in that week.
+## Moderated Multiple Regression
 
 
 ```{r}
-#removing outliers barely affected results
-
-ggplot(weekly_and_tony, aes(x = weeks_open, y = capacity)) +
-  geom_jitter(color = 'maroon') +
-  #not sure why line of best fit won't show up
-  geom_smooth(method = "lm", color = 'skyblue') +
-  labs(x = "weeks since opening", y = "weekly capcity") +
-  ggtitle("Effect of Weeks Since Opening on Weekly Capacity") +
-  theme_bw() +
-  theme(plot.title = element_text(hjust = 0.5), legend.position = "None")
-```
-
-
-```{r}
-capacity_lm <- lm(capacity ~ weeks_open, data = weekly_and_tony)
-summary(capacity_lm)
-CI <- confint(capacity_lm)
-CI
-```
-
-While the effect of weeks since opening on capacity is statistically significant, it is actually a significantly smaller effect than expected, and it is almost negligible. It may not be worth including in my time series model
-
-
-```{r}
-#mmr means moderated multiple regression
+#mmr stands for moderated multiple regression
 mmr <- lm(capacity ~ nominations*weeks_open + wins*weeks_open, data = weekly_and_tony)
 
 summary(mmr)
@@ -361,10 +348,12 @@ summary(mmr)
 
 
 ```{r}
+#finding confidence intervals
 confint(mmr)
 ```
 
 ```{r}
+#checking assumptions
 plot(mmr)
 ```
 
@@ -382,6 +371,7 @@ ggplot(mmr, aes(x = mmr$fitted.values, y = mmr$residuals)) +
 
 
 ```{r}
+#does not meet normality assumptions
 QQ_plot <- ggplot(mmr, aes(sample = mmr$residuals)) +
   stat_qq(color = "maroon") +
   stat_qq_line(color = "skyblue") + 
@@ -406,73 +396,66 @@ ggarrange(QQ_plot, resid_hist, ncol = 1, nrow = 2, labels = "AUTO")
 
 
 ```{r}
-#Interrupted time series
+#moderated multiple regression
 #testing on just one production first
-#aint_proud_tm <- lm(capacity ~ julian_date + post_noms + post_awards + weeks_open + nominations + wins, data = aint_proud)
+aint_proud_mmr <- lm(capacity ~ nominations + wins + weeks_open, data = aint_proud)
 
-aint_proud_tm <- lm(capacity ~ nominations + wins + weeks_open, data = aint_proud)
-
-#results indicate that for this show, the weeks it been open negatively affect its capacity (people want to see new things), time after noms led to a 4.8% increase in capacity, time after awards led to a 4.0% increase in capacity (not entirely accurate if you look at actual data for this show. Capacity did increase, but not by that much)
-#did not deem number of Tony noms or wins relevant, probably because I am only looking at one show, so number of noms/wins almost never changes
-summary(aint_proud_tm)
+summary(aint_proud_mmr)
 ```
 
 
 ```{r}
 #do the same thing as the above chunk but for every 2018-2019 production
-#make post_noms/awards into one column 
-#test_tm <- lm(capacity ~ julian_date + post_noms + post_awards + weeks_open + nominations + wins, data = test)
+test_mmr <- lm(capacity ~ nominations*weeks_open + wins*weeks_open, data = test)
 
-#ADD VAR that is weeks post awards???
-test_tm <- lm(capacity ~ nominations*weeks_open + wins*weeks_open, data = test)
-
-summary(test_tm)
+summary(test_mmr)
 ```
 
 
 ```{r}
-ts_coeffs <- list()
-ts_signif <- list()
+mmr_coeffs <- list()
+mmr_signif <- list()
 for (df in split_data){
-  #longevity_lm <- lm(weeks ~ nominations + wins, data = df)
-  #ts <- lm(capacity ~ julian_date + post_noms + post_awards + 
-  #          weeks_open + nominations + wins, data = df)
+  #running the model for each year of data
+  mmr <- lm(capacity ~ nominations*weeks_open + wins*weeks_open, data = df)
   
-  ts <- lm(capacity ~ nominations*weeks_open + wins*weeks_open, data = df)
-  #ts <- lm(capacity ~ nominations + wins + weeks_open, data = df)
+  #storing output in mmr_coeffs
+  coeffs <- c(mmr$coefficients, df$year[1])
+  mmr_coeffs <- append(mmr_coeffs, list(coeffs))
   
-  coeffs <- c(ts$coefficients, df$year[1])
-  ts_coeffs <- append(ts_coeffs, list(coeffs))
-  p_vals <- summary(ts)$coefficients[,4] 
-  r_sqr <- summary(ts)$adj.r.squared
-  CI <- confint(ts, level=0.95)
+  #storing output in mmr_signif
+  p_vals <- summary(mmr)$coefficients[,4] 
+  r_sqr <- summary(mmr)$adj.r.squared
+  CI <- confint(mmr, level=0.95)
   signif_list <- c(p_vals, r_sqr, CI, df$year[1])
-  ts_signif <- append(ts_signif, list(signif_list))
+  mmr_signif <- append(mmr_signif, list(signif_list))
 }
 ```
 
 
 ```{r}
 #making the results of the above chunk into a dataframe and making sure the column names make sense
-ts_coeffs_df <- as.data.frame(do.call(rbind, ts_coeffs))
-colnames(ts_coeffs_df) <- c("intercept_coeff", "noms_coeff", "weeks_open_coeff",
+mmr_coeffs_df <- as.data.frame(do.call(rbind, mmr_coeffs))
+colnames(mmr_coeffs_df) <- c("intercept_coeff", "noms_coeff", "weeks_open_coeff",
                               "wins_coeff", "noms_weeks_coeff", "wins_weeks_coeff", "year")
 
-ts_signif_df <- as.data.frame(do.call(rbind, ts_signif))
-colnames(ts_signif_df) <- c("intercept_pval", "noms_pval",  "weeks_open_pval", 
+mmr_signif_df <- as.data.frame(do.call(rbind, mmr_signif))
+colnames(mmr_signif_df) <- c("intercept_pval", "noms_pval",  "weeks_open_pval", 
                             "wins_pval", "noms_weeks_pval", "wins_weeks_pval",
                             "rsqr", "CI_1_int", "CI_1_noms", "CI_1_weeks", "CI_1_wins",
                             "CI_1_noms_weeks", "CI_1_wins_weeks", 
                             "CI_2_int", "CI_2_noms", "CI_2_weeks", "CI_2_wins",
                             "CI_2_noms_weeks", "CI_2_wins_weeks", "year")
 
-ts_df <- merge(ts_coeffs_df, ts_signif_df)
+mmr_df <- merge(mmr_coeffs_df, mmr_signif_df)
 ```
 
 
+The next chunk creates visuals that allow us to see if and to what extent the impact of nominations/wins (on weekly capacity) has changed over the last 40 years.
+
 ```{r}
 #plotting all of the results
-wins_effect_capacity <- ggplot(ts_df, aes(x = wins_coeff, y = year)) +
+wins_effect_capacity <- ggplot(mmr_df, aes(x = wins_coeff, y = year)) +
   geom_vline(xintercept = 0,lwd=1,colour="black", linetype = 2) +
   geom_errorbar(aes(xmin = CI_1_wins, xmax = CI_2_wins), alpha = 2,color = "skyblue") + 
   geom_point(color = "maroon") +
@@ -481,7 +464,7 @@ wins_effect_capacity <- ggplot(ts_df, aes(x = wins_coeff, y = year)) +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5))
 
-noms_effect_capacity <- ggplot(ts_df, aes(x = noms_coeff, y = year)) +
+noms_effect_capacity <- ggplot(mmr_df, aes(x = noms_coeff, y = year)) +
   geom_vline(xintercept = 0,lwd=1,colour="black", linetype = 2) +
   geom_errorbar(aes(xmin = CI_1_noms, xmax = CI_2_noms), alpha = 2,color = "skyblue") + 
   geom_point(color = "maroon") +
@@ -490,7 +473,7 @@ noms_effect_capacity <- ggplot(ts_df, aes(x = noms_coeff, y = year)) +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5))
 
-weeks_effect_capacity <- ggplot(ts_df, aes(x = weeks_open_coeff, y = year)) +
+weeks_effect_capacity <- ggplot(mmr_df, aes(x = weeks_open_coeff, y = year)) +
   geom_vline(xintercept = 0,lwd=1,colour="black", linetype = 2) +
   geom_errorbar(aes(xmin = CI_1_weeks, xmax = CI_2_weeks), alpha = 2,color = "skyblue") + 
   geom_point(color = "maroon") +
@@ -499,7 +482,7 @@ weeks_effect_capacity <- ggplot(ts_df, aes(x = weeks_open_coeff, y = year)) +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5))
 
-noms_weeks_interaction <- ggplot(ts_df, aes(x = noms_weeks_coeff, y = year)) +
+noms_weeks_interaction <- ggplot(mmr_df, aes(x = noms_weeks_coeff, y = year)) +
   geom_vline(xintercept = 0,lwd=1,colour="black", linetype = 2) +
   geom_errorbar(aes(xmin = CI_1_noms_weeks, xmax = CI_2_noms_weeks), alpha = 2,color = "skyblue") + 
   geom_point(color = "maroon") +
@@ -508,7 +491,7 @@ noms_weeks_interaction <- ggplot(ts_df, aes(x = noms_weeks_coeff, y = year)) +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5))
 
-wins_weeks_interaction <- ggplot(ts_df, aes(x = wins_weeks_coeff, y = year)) +
+wins_weeks_interaction <- ggplot(mmr_df, aes(x = wins_weeks_coeff, y = year)) +
   geom_vline(xintercept = 0,lwd=1,colour="black", linetype = 2) +
   geom_errorbar(aes(xmin = CI_1_wins_weeks, xmax = CI_2_wins_weeks), alpha = 2,color = "skyblue") + 
   geom_point(color = "maroon") +
@@ -528,7 +511,8 @@ ggarrange(noms_weeks_interaction, wins_weeks_interaction, ncol = 1, nrow = 2, al
 
 
 ```{r}
-ggplot(ts_df, aes(x = weeks_open_coeff)) +
+#did not end up including this visual or others like it in final analysis because it felt like overkill to have 5 more histograms in addition to the 5 plots above. Keeping code for now in case I decide to include it later
+ggplot(mmr_df, aes(x = weeks_open_coeff)) +
   geom_histogram(color = "black", fill = "skyblue") +
   geom_vline(xintercept = 0,lwd=.5,colour="maroon", linetype = 2) +
   ggtitle("Distribution of Yearly Regression Model Slopes for Weeks Open") +
@@ -538,11 +522,10 @@ ggplot(ts_df, aes(x = weeks_open_coeff)) +
 ```
 
 
-
 ```{r}
-#relevant to note that adjusted r-squared indicates a poor fit
-mean(ts_df$rsqr)
-median(ts_df$rsqr)
+#relevant to note that adjusted r-squared indicates a very poor fit
+mean(mmr_df$rsqr)
+median(mmr_df$rsqr)
 ```
 
 
