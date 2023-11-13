@@ -24,9 +24,8 @@ production_longevity <- read_csv("data/production_longevity.csv", show_col_types
 ## Longevity analysis
 
 ```{r}
-#remove outlier productions (probably should not do this. The fact that these productions stayed open unusally long makes them important)
 #production_longevity <- production_longevity[production_longevity$weeks <= 500, ]
-
+production_longevity <- production_longevity[production_longevity$type != "special", ]
 #want to analyze each year separately first
 split_data_unclean <- split(production_longevity, f = production_longevity$year)
 split_longev <- list()
@@ -77,7 +76,7 @@ long_lm_df <- merge(long_coeffs_df, long_signif_df)
 
 
 ```{r}
-ggplot(long_lm_df, aes(x = wins_coeff, y = year)) +
+wins_effect_plot <- ggplot(long_lm_df, aes(x = wins_coeff, y = year)) +
   geom_vline(xintercept = 0,lwd=1,colour="black", linetype = 2) +
   geom_errorbar(aes(xmin = CI_1_wins, xmax = CI_2_wins), alpha = 2,color = "skyblue") + 
   geom_point(color = "maroon") +
@@ -86,7 +85,7 @@ ggplot(long_lm_df, aes(x = wins_coeff, y = year)) +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5))
 
-ggplot(long_lm_df, aes(x = noms_coeff, y = year)) +
+noms_effect_plot <- ggplot(long_lm_df, aes(x = noms_coeff, y = year)) +
   geom_vline(xintercept = 0,lwd=1,colour="black", linetype = 2) +
   geom_errorbar(aes(xmin = CI_1_noms, xmax = CI_2_noms), alpha = 2,color = "skyblue") + 
   geom_point(color = "maroon") +
@@ -94,6 +93,11 @@ ggplot(long_lm_df, aes(x = noms_coeff, y = year)) +
   ggtitle("Effect Size of Nominations on Longevity\nfor Every Year (1980-2023)") +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5))
+
+ggarrange(noms_effect_plot, wins_effect_plot, ncol = 1, nrow = 2,  labels = "AUTO")
+
+#save image to folder in repo
+#ggsave("visuals/noms_wins_effect_longev.png", bg = "transparent", height = 10, width = 8)
 ```
 
 
@@ -102,7 +106,7 @@ It is important to note that the years that produced models with very large conf
 
 
 ```{r}
-ggplot(long_lm_df, aes(x = noms_coeff)) +
+noms_effect_hist_longev <- ggplot(long_lm_df, aes(x = noms_coeff)) +
   geom_histogram(color = "black", fill = "skyblue") +
   geom_vline(xintercept = 0,lwd=.5,colour="maroon", linetype = 2) +
   ggtitle("Distribution of Yearly Regression Model Slopes for Nominations") +
@@ -110,13 +114,18 @@ ggplot(long_lm_df, aes(x = noms_coeff)) +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5))
 
-ggplot(long_lm_df, aes(x = wins_coeff)) +
+wins_effect_hist_longev <- ggplot(long_lm_df, aes(x = wins_coeff)) +
   geom_histogram(color = "black", fill = "skyblue") +
   geom_vline(xintercept = 0,lwd=.5,colour="maroon", linetype = 2) +
-  ggtitle("Distribution of Yearly Regression Model Slopes for Nominations") +
+  ggtitle("Distribution of Yearly Regression Model Slopes for Wins") +
   labs(x = "wins effect size") +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5))
+
+ggarrange(noms_effect_hist_longev, wins_effect_hist_longev, ncol = 1, nrow = 2,  labels = "AUTO")
+
+#save image to folder in repo
+#ggsave("visuals/noms_wins_effect_hists.png", bg = "transparent", height = 10, width = 8)
 ```
 
 
@@ -134,7 +143,9 @@ median(long_lm_df$rsqr)
 
 ```{r}
 #adding a column for Julian date (might not be important, we'll see)
-weekly_and_tony$julian_date <- julian(weekly_and_tony$date) as.numeric(format(weekly_and_tony$date, "%j"))
+weekly_and_tony$julian_date <- julian(weekly_and_tony$date) 
+#other method for julian date
+#as.numeric(format(weekly_and_tony$date, "%j"))
 ```
 
 
@@ -342,6 +353,59 @@ While the effect of weeks since opening on capacity is statistically significant
 
 
 ```{r}
+#mmr means moderated multiple regression
+mmr <- lm(capacity ~ nominations*weeks_open + wins*weeks_open, data = weekly_and_tony)
+
+summary(mmr)
+```
+
+
+```{r}
+confint(mmr)
+```
+
+```{r}
+plot(mmr)
+```
+
+
+```{r}
+#does not meet homoscedasticity assumptions
+ggplot(mmr, aes(x = mmr$fitted.values, y = mmr$residuals)) +
+  geom_point(color = "maroon") +
+  geom_hline(yintercept = 0, color = "skyblue") +
+  labs(x = "fitted values", y = "residuals") +
+  ggtitle("Residuals vs Fitted\n(for moderated multiple regression)") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5)) 
+```
+
+
+```{r}
+QQ_plot <- ggplot(mmr, aes(sample = mmr$residuals)) +
+  stat_qq(color = "maroon") +
+  stat_qq_line(color = "skyblue") + 
+  labs(x = "theoretical quantiles", y = "sample quantiles") +
+  ggtitle("Normal Q-Q Plot\n(for moderated multiple regression)") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+resid_hist <- ggplot(mmr, aes(x = mmr$resid)) +
+  geom_histogram(color = "black", fill = "skyblue") +
+  #xlim(-500,500) +
+  labs(x = "residual value", y = "frequency") +
+  ggtitle("Distribution of Residuals\n(for moderated multiple regression)") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+ggarrange(QQ_plot, resid_hist, ncol = 1, nrow = 2, labels = "AUTO")
+
+#save image to folder in repo
+#ggsave("visuals/QQ+hist_mmr.png", bg = "transparent", height = 10, width = 8)
+```
+
+
+```{r}
 #Interrupted time series
 #testing on just one production first
 #aint_proud_tm <- lm(capacity ~ julian_date + post_noms + post_awards + weeks_open + nominations + wins, data = aint_proud)
@@ -408,7 +472,7 @@ ts_df <- merge(ts_coeffs_df, ts_signif_df)
 
 ```{r}
 #plotting all of the results
-ggplot(ts_df, aes(x = wins_coeff, y = year)) +
+wins_effect_capacity <- ggplot(ts_df, aes(x = wins_coeff, y = year)) +
   geom_vline(xintercept = 0,lwd=1,colour="black", linetype = 2) +
   geom_errorbar(aes(xmin = CI_1_wins, xmax = CI_2_wins), alpha = 2,color = "skyblue") + 
   geom_point(color = "maroon") +
@@ -417,7 +481,7 @@ ggplot(ts_df, aes(x = wins_coeff, y = year)) +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5))
 
-ggplot(ts_df, aes(x = noms_coeff, y = year)) +
+noms_effect_capacity <- ggplot(ts_df, aes(x = noms_coeff, y = year)) +
   geom_vline(xintercept = 0,lwd=1,colour="black", linetype = 2) +
   geom_errorbar(aes(xmin = CI_1_noms, xmax = CI_2_noms), alpha = 2,color = "skyblue") + 
   geom_point(color = "maroon") +
@@ -426,7 +490,7 @@ ggplot(ts_df, aes(x = noms_coeff, y = year)) +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5))
 
-ggplot(ts_df, aes(x = weeks_open_coeff, y = year)) +
+weeks_effect_capacity <- ggplot(ts_df, aes(x = weeks_open_coeff, y = year)) +
   geom_vline(xintercept = 0,lwd=1,colour="black", linetype = 2) +
   geom_errorbar(aes(xmin = CI_1_weeks, xmax = CI_2_weeks), alpha = 2,color = "skyblue") + 
   geom_point(color = "maroon") +
@@ -435,24 +499,45 @@ ggplot(ts_df, aes(x = weeks_open_coeff, y = year)) +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5))
 
-ggplot(ts_df, aes(x = noms_weeks_coeff, y = year)) +
+noms_weeks_interaction <- ggplot(ts_df, aes(x = noms_weeks_coeff, y = year)) +
   geom_vline(xintercept = 0,lwd=1,colour="black", linetype = 2) +
   geom_errorbar(aes(xmin = CI_1_noms_weeks, xmax = CI_2_noms_weeks), alpha = 2,color = "skyblue") + 
   geom_point(color = "maroon") +
   labs(x = "effect size of the interaction between Nominations and weeks since opening") +
-  ggtitle("Effect Size of the Interaction between Weeks\nSince Opening and nominations on Capacity\nfor Every Year (1980-2023)") +
+  ggtitle("Effect Size of the Interaction Between Weeks\nSince Opening and Nominations on Capacity\nfor Every Year (1980-2023)") +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5))
 
-ggplot(ts_df, aes(x = wins_weeks_coeff, y = year)) +
+wins_weeks_interaction <- ggplot(ts_df, aes(x = wins_weeks_coeff, y = year)) +
   geom_vline(xintercept = 0,lwd=1,colour="black", linetype = 2) +
   geom_errorbar(aes(xmin = CI_1_wins_weeks, xmax = CI_2_wins_weeks), alpha = 2,color = "skyblue") + 
   geom_point(color = "maroon") +
   labs(x = "effect size of the interaction between wins and weeks since opening") +
-  ggtitle("Effect Size of the Interaction between Weeks\nSince Opening and Wins on Capacity\nfor Every Year (1980-2023)") +
+  ggtitle("Effect Size of the Interaction Between Weeks\nSince Opening and Wins on Capacity\nfor Every Year (1980-2023)") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+ggarrange(noms_effect_capacity, wins_effect_capacity, weeks_effect_capacity, align = "none", labels = "AUTO")
+#save image to folder in repo
+#ggsave("visuals/noms_wins_effect_capacity.png", bg = "transparent", height = 10, width = 10)
+
+ggarrange(noms_weeks_interaction, wins_weeks_interaction, ncol = 1, nrow = 2, align = "none", labels = "AUTO")
+#save image to folder in repo
+#ggsave("visuals/interaction_effect_capacity.png", bg = "transparent", height = 10, width = 8)
+```
+
+
+```{r}
+ggplot(ts_df, aes(x = weeks_open_coeff)) +
+  geom_histogram(color = "black", fill = "skyblue") +
+  geom_vline(xintercept = 0,lwd=.5,colour="maroon", linetype = 2) +
+  ggtitle("Distribution of Yearly Regression Model Slopes for Weeks Open") +
+  labs(x = "weeks open effect size") +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5))
 ```
+
+
 
 ```{r}
 #relevant to note that adjusted r-squared indicates a poor fit

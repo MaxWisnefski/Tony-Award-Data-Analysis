@@ -11,7 +11,8 @@ library(dplyr)
 library(ggplot2)
 library(tidyverse)
 library(magrittr)
-library(car)
+#library(car)
+library(ggpubr)
 ```
 
 
@@ -33,8 +34,6 @@ weekly_data = weekly_data[weekly_data$gross > 0, ]
 length(unique(weekly_data$production))
 ```
 
-
-The above number is higher than the number of rows in tony_data. I am almost positive that this is the case because my web scraping code for tony_data ignored productions that did not receive any nominations. I am basing this off of the fact that "Bad Cinderella" (which is in weekly_data) did not receive any nominations and does not appear in tony_data. This applies to a few other productions as well
 
 ```{r}
 #the values for date are all strings. I need to change them vars of class date
@@ -104,7 +103,7 @@ for (i in 1:length(all_relevant_data$year)){
 
 ```{r}
 #get rid of productions that are eligible for the 2024 Tonys as these have not happened yet (only applies to 2 productions in the data)
-#get rid of productions that are eligible for the 2020 (actually 2021) Tonys as the Tonys were odd that year due to Covid (will discuss this more in final paper)
+#get rid of productions that are eligible for the 2020 (actually 2021) Tonys as the Tonys were odd that year due to Covid (see final paper for more detailed explanation)
 #get rid of productions that were eligible for pre-1980 Tonys as the data are too sparse
 all_relevant_data <- all_relevant_data[all_relevant_data$year != 2024, ]
 all_relevant_data <- all_relevant_data[all_relevant_data$year != 2020, ]
@@ -153,6 +152,18 @@ median_run_len
 
 
 ```{r}
+ggplot(prod_longevity, aes(x = weeks)) +
+  geom_histogram(fill = "skyblue", color = "black") +
+  geom_vline(xintercept = 14,lwd=1,colour="maroon", linetype = 2) +
+  xlim(0,450) +
+  labs(x = "runtime (weeks)") +
+  ggtitle("Distribution of Runtimes for All Relevant Productions") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+```{r}
 #number of productions that are relevant to analysis for each year (i.e. Broadway season)
 prods_per_year <- prod_longevity %>% group_by(year) %>%
                         summarise(num_prods = n())
@@ -178,7 +189,10 @@ monthly_capacity
 ## Initial Analysis
 
 ```{r}
-ggplot(prod_longevity, aes(x = wins, y = weeks)) +
+#remove specials since they are limited engagements (their longevity cannot be affected by Tonys)
+production_longevity <- production_longevity[production_longevity$type != "special", ]
+
+noms_longev_plot <- ggplot(prod_longevity, aes(x = wins, y = weeks)) +
   geom_jitter(color = 'maroon') +
   #not sure why line of best fit won't show up
   geom_smooth(method = "lm", color = 'skyblue') +
@@ -187,10 +201,8 @@ ggplot(prod_longevity, aes(x = wins, y = weeks)) +
   ggtitle("Effect of Tony Wins on Production Longevity") +
   theme_bw() + 
   theme(plot.title = element_text(hjust = 0.5))
-```
 
-```{r}
-ggplot(prod_longevity, aes(x = nominations, y = weeks)) +
+wins_longev_plot <- ggplot(prod_longevity, aes(x = nominations, y = weeks)) +
   geom_jitter(color = 'maroon') +
   #not sure why line of best fit won't show up
   geom_smooth(method = "lm", color = 'skyblue') +
@@ -199,12 +211,20 @@ ggplot(prod_longevity, aes(x = nominations, y = weeks)) +
   ggtitle("Effect of Tony Nominations on Production Longevity") +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5))
+
+ggarrange(wins_longev_plot, noms_longev_plot, ncol = 1, nrow = 2, labels = "AUTO")
+
+#save image to folder in repo
+#ggsave("visuals/noms_wins_longevity.png", bg = "transparent", height = 10, width = 10)
 ```
+
 
 ```{r}
 longevity_lm <- lm(weeks ~ nominations + wins, data = prod_longevity)
 summary(longevity_lm)
 ```
+
+
 ```{r}
 #calculating confidence interval
 confint(longevity_lm, level=0.95)
@@ -219,14 +239,46 @@ vif(longevity_lm)
 
 ### Checking assumptions of the Linear Regression model
 
+
 ```{r}
-qqnorm(longevity_lm$resid, col = "maroon")
-qqline(longevity_lm$resid, col = "skyblue", lwd = 2)
+plot(longevity_lm)
 ```
 
 
 ```{r}
-hist(longevity_lm$resid, xlim = c(-500,500), breaks = 30, col = "skyblue")
+#some homoscedasticity
+ggplot(longevity_lm, aes(x = longevity_lm$fitted.values, y = longevity_lm$residuals)) +
+  geom_point(color = "maroon") +
+  geom_hline(yintercept = 0, color = "skyblue") +
+  labs(x = "fitted values", y = "residuals") +
+  ggtitle("Residuals vs Fitted\n(for intial regression model)") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5)) 
+```
+
+
+
+```{r}
+QQ_plot <- ggplot(longevity_lm, aes(sample = longevity_lm$residuals)) +
+  stat_qq(color = "maroon") +
+  stat_qq_line(color = "skyblue") + 
+  labs(x = "theoretical quantiles", y = "sample quantiles") +
+  ggtitle("Normal Q-Q Plot\n(for intial regression model)") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+resid_hist <- ggplot(longevity_lm, aes(x = longevity_lm$resid)) +
+  geom_histogram(color = "black", fill = "skyblue") +
+  xlim(-500,500) +
+  labs(x = "residual value", y = "frequency") +
+  ggtitle("Distribution of Residuals\n(for intial regression model)") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+ggarrange(QQ_plot, resid_hist, ncol = 1, nrow = 2, labels = "AUTO")
+
+#save image to folder in repo
+#ggsave("visuals/QQ+hist.png", bg = "transparent", height = 10, width = 8)
 ```
 
 
@@ -236,7 +288,7 @@ pirate_queen <- weekly_data[weekly_data$production == 'the-pirate-queen-426183',
 ```
 
 ```{r}
-ggplot(spring_awake, aes(x = date, y = gross))+
+spring_awake_plot <- ggplot(spring_awake, aes(x = date, y = gross))+
   geom_line(color = 'maroon') +
   scale_x_date(date_breaks = "1 month", 
                  date_labels = "%B",
@@ -247,10 +299,9 @@ ggplot(spring_awake, aes(x = date, y = gross))+
   geom_vline(xintercept =  as.numeric(as.Date("2007-05-14")), lwd = 1, color = 'skyblue') +
   geom_vline(xintercept =  as.numeric(as.Date("2007-06-10")), lwd = 1, color = 'skyblue') +
   theme(plot.title = element_text(hjust = 0.5))
-```
 
-```{r}
-ggplot(pirate_queen, aes(x = date, y = gross))+
+
+pirate_queen_plot <- ggplot(pirate_queen, aes(x = date, y = gross))+
   geom_line(color = 'maroon') +
   ylim(100000, 900000) +
   scale_x_date(date_breaks = "1 month", 
@@ -262,6 +313,11 @@ ggplot(pirate_queen, aes(x = date, y = gross))+
   geom_vline(xintercept =  as.numeric(as.Date("2007-05-14")), lwd = 1, color = 'skyblue') +
   geom_vline(xintercept =  as.numeric(as.Date("2007-06-10")), lwd = 1, color = 'skyblue') +
   theme(plot.title = element_text(hjust = 0.5))
+
+ggarrange(spring_awake_plot, pirate_queen_plot, ncol = 1, nrow = 2, labels = "AUTO")
+
+#save image to folder in repo
+#ggsave("visuals/two_shows_ex.png", bg = "transparent", height = 10, width = 8)
 ```
 
 
