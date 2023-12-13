@@ -161,7 +161,7 @@ ggplot(prod_longevity, aes(x = weeks)) +
   geom_histogram(fill = "skyblue", color = "black") +
   geom_vline(xintercept = 14,lwd=1,colour="maroon", linetype = 2) +
   xlim(0,450) +
-  labs(x = "runtime (weeks)") +
+  labs(x = "runtime (weeks)", y = "number of productions") +
   ggtitle("Distribution of Runtimes for All Relevant Productions") +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5))
