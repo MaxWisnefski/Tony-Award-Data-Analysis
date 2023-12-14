@@ -95,6 +95,7 @@ wins_effect_plot <- ggplot(long_lm_df, aes(x = wins_coeff, y = year)) +
   geom_point(color = "maroon") +
   labs(x = "wins effect size") +
   ggtitle("Effect Size of Wins on Longevity\nfor Every Year (1980-2023)") +
+  #ggtitle("Impact of Wins on Production Longevity\nfor Every Year (1980-2023)") +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5))
 
@@ -104,13 +105,16 @@ noms_effect_plot <- ggplot(long_lm_df, aes(x = noms_coeff, y = year)) +
   geom_point(color = "maroon") +
   labs(x = "nominations effect size") +
   ggtitle("Effect Size of Nominations on Longevity\nfor Every Year (1980-2023)") +
+  #ggtitle("Impact of Nominations on Production Longevity\nfor Every Year (1980-2023)") +
   theme_bw() +
   theme(plot.title = element_text(hjust = 0.5))
 
 ggarrange(noms_effect_plot, wins_effect_plot, ncol = 1, nrow = 2,  labels = "AUTO")
+#ggarrange(noms_effect_plot, wins_effect_plot, ncol = 2, nrow = 1,  labels = "AUTO")
 
 #save image to folder in repo
 #ggsave("visuals/noms_wins_effect_longev.png", bg = "transparent", height = 10, width = 8)
+#ggsave("../noms_wins_effect_longev.png", bg = "transparent", height = 3.5, width = 9)
 ```
 
 It is important to note that the years that produced models with very large confidence intervals are all years that had an outlier production that stayed open for an unusually long time. 1988 has Phantom of the Opera, 1998 has The Lion King, 2004 has Wicked, and 2014 has Aladdin. 

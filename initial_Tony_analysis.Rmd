@@ -304,7 +304,7 @@ pirate_queen <- weekly_data[weekly_data$production == 'the-pirate-queen-426183',
 spring_awake_plot <- ggplot(spring_awake, aes(x = date, y = gross))+
   geom_line(color = 'maroon') +
   scale_x_date(date_breaks = "1 month", 
-                 date_labels = "%B",
+                 date_labels = "%b",
                  limits = as.Date(c('2006-11-19','2007-08-05'))) +
   labs(y = "weekly gross") +
   ggtitle("Change in Weekly Gross for Spring Awakening\n(2006 - 2007 season)") +
@@ -318,7 +318,7 @@ pirate_queen_plot <- ggplot(pirate_queen, aes(x = date, y = gross))+
   geom_line(color = 'maroon') +
   ylim(100000, 900000) +
   scale_x_date(date_breaks = "1 month", 
-                 date_labels = "%B",
+                 date_labels = "%b",
                  limits = as.Date(c('2007-03-11','2007-08-05'))) +
   labs(y = "weekly gross") +
   ggtitle("Change in Weekly Gross for The Pirate Queen\n(2006 - 2007 season)") +
@@ -328,9 +328,12 @@ pirate_queen_plot <- ggplot(pirate_queen, aes(x = date, y = gross))+
   theme(plot.title = element_text(hjust = 0.5))
 
 ggarrange(spring_awake_plot, pirate_queen_plot, ncol = 1, nrow = 2, labels = "AUTO")
+#ggarrange(spring_awake_plot, pirate_queen_plot, ncol = 2, nrow = 1, labels = "AUTO")
+
 
 #save image to folder in repo
 #ggsave("visuals/two_shows_ex.png", bg = "transparent", height = 10, width = 8)
+#ggsave("../two_shows_ex.png", bg = "transparent", height = 3, width = 9)
 ```
 
 
